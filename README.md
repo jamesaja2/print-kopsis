@@ -1,52 +1,72 @@
-# PendaftaranScale
+# Print Kopsis
 
-Sistem Pendaftaran dan Dashboard Admin untuk event Scale.
+Sistem manajemen print order berbasis Next.js untuk admin panel, user order flow, dan integrasi kiosk.
 
-## Fitur
+## Fitur Utama
 
--   **Pendaftaran Tim**: Wizard pendaftaran multi-langkah dengan pembayaran.
--   **Dashboard Peserta**: Kelola profil, status pembayaran, dan submisi.
--   **Dashboard Admin**: Verifikasi pembayaran, kelola pengguna, dan atur booth.
--   **Integrasi Pembayaran**: Menggunakan YoGateway untuk pembayaran QRIS.
--   **Manajemen Konten**: Edit pengumuman dan resources.
+- Manajemen order print end-to-end: upload, pricing, payment, hingga status cetak.
+- Dashboard admin untuk monitoring order, users, sales summary, dan override status.
+- Integrasi payment gateway (Paymenku) dengan check-status sinkron tanpa bergantung penuh pada webhook.
+- Integrasi kiosk API berbasis bearer token untuk alur start/complete/fail printing.
+- Global settings di admin untuk payment gateway, registration fee, dan kiosk token.
 
-## Teknologi
+## Stack
 
--   **Framework**: Next.js 16 (App Router)
--   **Styling**: Tailwind CSS
--   **Database**: PostgreSQL (via Prisma ORM)
--   **Auth**: NextAuth.js
--   **Template**: Based on TailAdmin Free Next.js Template
+- Next.js (App Router) + TypeScript
+- Prisma ORM + PostgreSQL
+- NextAuth untuk autentikasi
+- Tailwind CSS untuk UI
 
-## Cara Install
+## Menjalankan Lokal
 
-1.  Clone repository:
-    \\\ash
-    git clone https://github.com/jamesaja2/pendaftaranscale.git
-    cd pendaftaranscale
-    \\\
+1. Clone repository:
 
-2.  Install dependencies:
-    \\\ash
-    npm install
-    \\\
+```bash
+git clone https://github.com/jamesaja2/print-kopsis.git
+cd print-kopsis
+```
 
-3.  Setup Environment Variables:
-    Copy \.env\ dan sesuaikan dengan konfigurasi database dan payment gateway Anda.
+2. Install dependency:
 
-4.  Jalankan database migration:
-    \\\ash
-    npx prisma db push
-    \\\
+```bash
+npm install
+```
 
-5.  Jalankan server development:
-    \\\ash
-    npm run dev
-    \\\
+3. Buat file environment:
 
-## Deployment ke Vercel
+```bash
+cp .env.example .env
+```
 
-1.  Push project ke GitHub.
-2.  Import project di Vercel.
-3.  Set Environment Variables di Vercel (DATABASE_URL, NEXTAUTH_SECRET, etc).
-4.  Build command sudah dikonfigurasi otomatis (\prisma generate && next build\).
+4. Isi variabel penting di `.env` minimal:
+
+- `DATABASE_URL`
+- `NEXTAUTH_SECRET`
+- `NEXTAUTH_URL`
+- `FILE_SERVER_BASE_URL` (jika digunakan)
+- `PAYMENKU_API_KEY` (opsional jika tidak disimpan di Global Settings)
+- `KIOSK_API_TOKEN` (fallback jika belum diset di Global Settings)
+
+5. Sinkronkan schema database:
+
+```bash
+npx prisma db push
+```
+
+6. Jalankan aplikasi:
+
+```bash
+npm run dev
+```
+
+## Build Production
+
+```bash
+npm run build
+npm run start
+```
+
+## Catatan Operasional
+
+- Kiosk token bisa diatur dari halaman admin Global Settings.
+- Payment status user dapat disinkronkan aktif lewat endpoint check-status (selain webhook callback).
