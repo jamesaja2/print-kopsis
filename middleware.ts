@@ -29,7 +29,6 @@ const REMOVED_MODULE_PATHS = [
   "/register",
   "/booths",
   "/payouts",
-  "/content",
 ];
 
 function isRemovedModulePath(pathname: string) {
