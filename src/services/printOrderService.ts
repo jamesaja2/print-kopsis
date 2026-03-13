@@ -181,6 +181,7 @@ export class PrintOrderService {
             });
             return {
                 gatewayStatus,
+                paymentStatus: "PAID",
                 order: refreshed || updatedOrder,
             };
         }
@@ -209,6 +210,7 @@ export class PrintOrderService {
 
         return {
             gatewayStatus,
+            paymentStatus: refreshed?.payment?.status || order.payment.status,
             order: refreshed || order,
         };
     }

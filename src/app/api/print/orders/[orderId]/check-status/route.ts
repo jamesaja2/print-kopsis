@@ -17,7 +17,7 @@ export async function POST(
             {
                 orderId: result.order.id,
                 orderStatus: result.order.status,
-                paymentStatus: result.order.payment?.status || "PENDING",
+                paymentStatus: result.paymentStatus,
                 gatewayStatus: result.gatewayStatus,
                 orderCode: result.order.orderCode,
             },
