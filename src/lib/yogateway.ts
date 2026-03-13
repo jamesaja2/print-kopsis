@@ -1,84 +1,115 @@
 "use server";
 
 import prisma from "@/lib/prisma";
-import crypto from 'crypto';
+
+type CreatePaymentParams = {
+  referenceId: string;
+  amount: number;
+  customerName: string;
+  customerEmail: string;
+  customerPhone?: string;
+  channelCode?: string;
+  returnUrl: string;
+};
+
+const PAYMENKU_BASE_URL = "https://paymenku.com/api/v1";
+
+async function getPaymentGatewayKey() {
+  const settings = await prisma.globalSettings.findMany({
+    where: {
+      key: { in: ["payment_gateway_id", "payment_gateway_key"] },
+    },
+  });
+
+  const dbKey = settings.find((s) => s.key === "payment_gateway_key")?.value?.trim() || "";
+  const envKey = (process.env.PAYMENKU_API_KEY || process.env.PAYMENT_GATEWAY_KEY || "").trim();
+  return dbKey || envKey;
+}
 
 /**
- * Creates a payment transaction via YoGateway API.
+ * Creates a payment transaction via Paymenku API.
  * @param amount Amount in IDR (min 1000)
  * @returns { success: boolean, data?: any, error?: string }
  */
-export async function createYoGatewayPayment(amount: number) {
+export async function createYoGatewayPayment(params: CreatePaymentParams) {
   try {
-    const settings = await prisma.globalSettings.findMany({
-      where: {
-        key: { in: ['payment_gateway_id', 'payment_gateway_key'] }
-      }
-    });
+    const apiKey = await getPaymentGatewayKey();
 
-    const apiKey = settings.find(s => s.key === 'payment_gateway_key')?.value;
-    
-    // We don't actually need ID for the API call according to doc, just API Key?
-    // Doc says: apikey=...
-    // But usually Gateway ID is needed somewhere, or maybe API Key interacts.
-    // The user prompts "payment_gateway_id" in settings, so maybe it's used?
-    // Looking at the doc provided: 
-    // $url = "https://yogateway.id//api.php?action=createpayment&apikey=yo_sec_...&amount=10000";
-    // It seems only API KEY (yo_sec_...) is needed.
-    
     if (!apiKey) {
-      console.error("YoGateway API Key missing");
+      console.error("Paymenku API Key missing");
       return { success: false, error: "Payment Gateway configuration missing" };
     }
 
-    const apiUrl = `https://yogateway.id/api.php?action=createpayment&apikey=${apiKey}&amount=${amount}`;
-    
-    const response = await fetch(apiUrl);
+    const body = {
+      reference_id: params.referenceId,
+      amount: Math.round(params.amount),
+      customer_name: params.customerName,
+      customer_email: params.customerEmail,
+      customer_phone: params.customerPhone,
+      channel_code: params.channelCode || "qris",
+      return_url: params.returnUrl,
+    };
+
+    const response = await fetch(`${PAYMENKU_BASE_URL}/transaction/create`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+      cache: "no-store",
+    });
+
     const result = await response.json();
 
-    if (result.status && result.data) {
+    if (response.ok && result?.status === "success" && result?.data) {
       return { success: true, data: result.data };
-    } else {
-      console.error("YoGateway Error:", result);
-      return { success: false, error: "Failed to create payment link" };
     }
 
+    console.error("Paymenku Error:", result);
+    return {
+      success: false,
+      error: result?.message || result?.error || "Failed to create payment link",
+    };
+
   } catch (error) {
-    console.error("YoGateway Exception:", error);
+    console.error("Paymenku Exception:", error);
     return { success: false, error: "Exception calling Payment Gateway" };
   }
 }
 
 /**
- * Checks payment status via YoGateway API.
- * @param trxId Transaction ID (e.g. YO-...)
+ * Checks payment status via Paymenku API.
+ * @param orderId Transaction ID (trx_id) or merchant reference_id
  */
-export async function checkYoGatewayPaymentStatus(trxId: string) {
+export async function checkYoGatewayPaymentStatus(orderId: string) {
   try {
-    const settings = await prisma.globalSettings.findMany({
-       where: { key: 'payment_gateway_key' }
-    });
-    const apiKey = settings.find(s => s.key === 'payment_gateway_key')?.value;
+    const apiKey = await getPaymentGatewayKey();
 
     if (!apiKey) return { success: false, error: "API Key missing" };
 
-    const apiUrl = `https://yogateway.id/api.php?action=checkstatus&apikey=${apiKey}&trxid=${trxId}`;
-    console.log("Checking Payment Status:", apiUrl); // Log for debugging
-
-    const response = await fetch(apiUrl, { cache: 'no-store' });
+    const apiUrl = `${PAYMENKU_BASE_URL}/check-status/${encodeURIComponent(orderId)}`;
+    const response = await fetch(apiUrl, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+      cache: "no-store",
+    });
     const result = await response.json();
 
-    // Result structure:
-    // { status: true, data: { status: "SUCCESS" | "PENDING" | "EXPIRED", ... } }
-    
-    if (result.status && result.data) {
-        return { success: true, status: result.data.status, data: result.data };
+    if (response.ok && result?.data) {
+      const status = String(result.data.status || "").toLowerCase();
+      return { success: true, status, data: result.data };
     }
-    
-    return { success: false, error: "Invalid response from gateway" };
+
+    return {
+      success: false,
+      error: result?.message || result?.error || "Invalid response from gateway",
+    };
 
   } catch (error) {
-    console.error("YoGateway Check Exception:", error);
+    console.error("Paymenku Check Exception:", error);
     return { success: false, error: "Exception calling Check Status" };
   }
 }

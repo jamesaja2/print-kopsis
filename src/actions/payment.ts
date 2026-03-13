@@ -20,12 +20,12 @@ export async function checkPaymentStatus(teamId: string) {
       return { success: false, message: 'Manual transfer requires admin verification.' };
     }
 
-    // Call Real YoGateway
+    // Call payment gateway status endpoint
     const check = await checkYoGatewayPaymentStatus(team.paymentTrxId);
     
     console.log(`[CheckPayment] Team: ${team.name} (${teamId}) - Trx: ${team.paymentTrxId} - Result:`, check);
 
-    if (check.success && check.status === 'SUCCESS') {
+    if (check.success && check.status === 'paid') {
       await prisma.team.update({
         where: { id: teamId },
         data: {
@@ -37,7 +37,7 @@ export async function checkPaymentStatus(teamId: string) {
       revalidatePath('/');
       return { success: true, message: 'Payment verified! You can now proceed.' };
     } 
-    else if (check.success && check.status === 'EXPIRED') {
+    else if (check.success && (check.status === 'expired' || check.status === 'cancelled')) {
        return { success: false, message: 'Payment has EXPIRED. Please register again or contact admin.' };
     }
 
@@ -58,7 +58,10 @@ export async function updatePaymentMethod(option: PaymentMethodOption) {
     return { error: 'Unauthorized' };
   }
 
-  const team = await prisma.team.findUnique({ where: { userId: (session.user as any).id } });
+  const team = await prisma.team.findUnique({
+    where: { userId: (session.user as any).id },
+    include: { user: true },
+  });
   if (!team) {
     return { error: 'Team not found' };
   }
@@ -92,17 +95,27 @@ export async function updatePaymentMethod(option: PaymentMethodOption) {
       return { error: 'Registration fee must be at least IDR 1,000 before enabling QRIS payments.' };
     }
 
-    const payment = await createYoGatewayPayment(feeValue);
+    const appBaseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || 'http://localhost:3000').replace(/\/$/, '');
+    const customerName = (team.user.name || team.name || team.user.email.split('@')[0] || 'Customer').trim();
+    const payment = await createYoGatewayPayment({
+      referenceId: `TEAM-${team.id}`,
+      amount: feeValue,
+      customerName,
+      customerEmail: team.user.email,
+      channelCode: 'qris',
+      returnUrl: `${appBaseUrl}/register?payment=done`,
+    });
     if (!payment.success || !payment.data) {
       return { error: payment.error || 'Failed to create QRIS payment session. Please try again.' };
     }
 
-    const { trx_id, payment_url, expired_at } = payment.data as any;
-    if (!trx_id || !payment_url) {
+    const { trx_id, pay_url } = payment.data as any;
+    const expiredAt = (payment.data as any)?.payment_info?.expiration_date as string | undefined;
+    if (!trx_id || !pay_url) {
       return { error: 'Incomplete response from payment gateway.' };
     }
 
-    const parsedDeadline = expired_at ? new Date(expired_at) : null;
+    const parsedDeadline = expiredAt ? new Date(expiredAt) : null;
     const deadline = parsedDeadline && !isNaN(parsedDeadline.getTime())
       ? parsedDeadline
       : (() => {
@@ -112,7 +125,7 @@ export async function updatePaymentMethod(option: PaymentMethodOption) {
         })();
 
     data.paymentTrxId = trx_id;
-    data.paymentUrl = payment_url;
+    data.paymentUrl = pay_url;
     data.paymentDeadline = deadline;
     data.manualPaymentAmount = null;
     data.manualPaymentNote = null;

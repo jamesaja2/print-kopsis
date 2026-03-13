@@ -6,18 +6,11 @@ import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useSidebar } from "../context/SidebarContext";
 import {
-  BoxCubeIcon,
-  CalenderIcon,
   ChevronDownIcon,
   GridIcon,
   HorizontaLDots,
-  ListIcon,
   PageIcon,
-  PieChartIcon,
-  PlugInIcon,
-  TableIcon,
   UserCircleIcon,
-  FolderIcon,
 } from "../icons/index";
 
 type NavItem = {
@@ -37,103 +30,48 @@ const navItems: NavItem[] = [
 
 const participantItems: NavItem[] = [
   {
-    icon: <PageIcon />, // Using PageIcon for general tasks/submissions
-    name: "Submissions",
-    path: "/submissions",
+    icon: <PageIcon />,
+    name: "Print Orders",
+    path: "/print/orders",
   },
   {
-    icon: <BoxCubeIcon />,
-    name: "Inventaris Barang",
-    path: "/my-inventory",
+    icon: <UserCircleIcon />,
+    name: "Profile",
+    path: "/profile",
   },
+];
+
+const othersItems: NavItem[] = [
   {
-    icon: <GridIcon />,
-    name: "Katalog Produk",
-    path: "/my-products",
+    icon: <PageIcon />,
+    name: "Global Settings",
+    path: "/content",
   },
   {
     icon: <PageIcon />,
-    name: "Saldo & Payout",
-    path: "/my-payout",
+    name: "Announcements",
+    path: "/announcements",
   },
-];
-
-const participantVotingItem: NavItem = {
-  icon: <PieChartIcon />,
-  name: "Voting Results",
-  path: "/voting-results",
-};
-
-const resourceItems: NavItem[] = [
-  {
-    icon: <FolderIcon />,
-    name: "Official Resources",
-    path: "/resources",
-  }
-];
-
-const registerItem: NavItem = {
-    icon: <PageIcon />, // Using PageIcon generic
-    name: "Registration",
-    path: "/register",
-};
-
-const othersItems: NavItem[] = [
   {
     icon: <UserCircleIcon />,
     name: "User Management",
     path: "/users",
   },
   {
-    icon: <FolderIcon />, // Reusing FolderIcon
-    name: "Resources (CRUD)",
-    path: "/resources",
+    icon: <PageIcon />,
+    name: "Print Orders",
+    path: "/print/orders",
   },
   {
     icon: <PageIcon />,
-    name: "Content Management",
-    path: "/content",
-  },
-  {
-    icon: <BoxCubeIcon />,
-    name: "Booth Management", // Slot Stand
-    path: "/booths",
+    name: "Print Pricing",
+    path: "/print/price-config",
   },
   {
     icon: <PageIcon />,
-    name: "Payout Management",
-    path: "/payouts",
+    name: "Print Users",
+    path: "/print/users",
   },
-  {
-    icon: <PlugInIcon />,
-    name: "Announcements",
-    path: "/announcements",
-  },
-  {
-    icon: <PageIcon />,
-    name: "Submissions",
-    path: "/submissions",
-  },
-  {
-    icon: <PageIcon />,
-    name: "Link in Bio",
-    path: "/link-in-bio/manage",
-  },
-  {
-    icon: <ListIcon />,
-    name: "Voting Events",
-    path: "/voting",
-  },
-  {
-    icon: <BoxCubeIcon />,
-    name: "Inventaris Tim",
-    path: "/inventory",
-  },
-  {
-    icon: <GridIcon />,
-    name: "Katalog Produk Tim",
-    path: "/products",
-  }
 ];
 
 const AppSidebar: React.FC = () => {
@@ -141,24 +79,8 @@ const AppSidebar: React.FC = () => {
   const pathname = usePathname();
   const { data: session } = useSession();
   const userRole = (session?.user as any)?.role;
-  const hasTeam = (session?.user as any)?.hasTeam;
-  const hasPaidTeam = (session?.user as any)?.hasPaidTeam;
   const isParticipant = userRole !== 'ADMIN';
-  const participantMenuItems = hasPaidTeam ? [...participantItems, participantVotingItem] : participantItems;
 
-  // FIX: If hasTeam is true (meaning created), BUT payment is incomplete, 
-  // we might still want to show "Registration" or "Payment" instead of hiding it.
-  // However, the current logic is: 
-  // - If hasTeam -> Show Submissions (Participant Items)
-  // - If !hasTeam -> Show Registration (Register Item)
-  // But if the user has a team but Unpaid, they are stuck in "Paid" view in sidebar?
-  // Let's rely on the Dashboard redirect, or:
-  // We can't easily know paymentStatus here without fetching it or adding to session. 
-  // Adding paymentStatus to session would be ideal.
-  // For now, let's keep it simple: If they have a team, they see Submissions. 
-  // If they click Submissions, the page itself redirects them if not paid.
-  // So they are forced to deal with it.
-  
   const renderMenuItems = (
     navItems: NavItem[],
     menuType: "main" | "others"
@@ -418,11 +340,7 @@ const AppSidebar: React.FC = () => {
               
               {isParticipant && (
                  <div className="mt-4">
-                  {hasTeam ? renderMenuItems(participantMenuItems, "main") : renderMenuItems([registerItem], "main")}
-                  {/* Resources visible to all participants regardless of team/payment status */}
-                  <div className="mt-4">
-                     {renderMenuItems(resourceItems, "main")}
-                  </div>
+                  {renderMenuItems(participantItems, "main")}
                  </div>
               )}
             </div>

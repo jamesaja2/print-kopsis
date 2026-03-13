@@ -1,446 +1,605 @@
-# SimpleS3 - A Simple S3-Like File Storage Server
+# API Documentation — S3-like Object Storage
 
-A lightweight, secure, and high-performance file storage server with S3-like API, built with Node.js and Express.
-
-## Features
-
-- 🔐 **Bearer Token Authentication** - Secure API access via `.env` configuration
-- 🌐 **Public Read Mode** - Optional public file access for browsers (images, downloads)
-- 📁 **CRUD Operations** - Create, Read, Update, Delete files via REST API
-- 🛡️ **Security** - Path traversal protection, timing-safe token comparison
-- ⚡ **High Performance** - Clustering, streaming, compression, and caching
-- 📦 **Simple Setup** - Just install dependencies and run
-
-## Quick Start
-
-1. **Install dependencies:**
-   ```bash
-   npm install
-   ```
-
-2. **Configure your environment:**
-   Edit `.env` and set your options:
-   ```env
-   API_TOKEN=your-super-secure-random-token
-   PUBLIC_READ=true   # Allow browsers to access files directly
-   ```
-
-3. **Start the server:**
-   ```bash
-   npm start
-   # or for development with auto-reload:
-   npm run dev
-   ```
-
-## Configuration
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `API_TOKEN` | Bearer token for authentication | Required |
-| `PORT` | Server port | `3000` |
-| `STORAGE_DIR` | Directory for file storage | `./storage` |
-| `ENABLE_CLUSTER` | Use all CPU cores | `true` |
-| `NUM_WORKERS` | Number of worker processes | CPU cores |
-| `PUBLIC_READ` | Allow public GET/HEAD on files | `false` |
-
-## API Endpoints
-
-| Method | Endpoint | Auth Required | Description |
-|--------|----------|---------------|-------------|
-| `GET` | `/health` | ✅ Yes | Health check |
-| `GET` | `/files` | ✅ Yes | List all files |
-| `POST` | `/files` | ✅ Yes | Upload file (auto-generated key) |
-| `PUT` | `/files/:key` | ✅ Yes | Upload file with specific key |
-| `GET` | `/files/:key` | ⚡ Optional* | Download file |
-| `HEAD` | `/files/:key` | ⚡ Optional* | Get file metadata |
-| `DELETE` | `/files/:key` | ✅ Yes | Delete file |
-
-> *When `PUBLIC_READ=true`, GET/HEAD on `/files/:key` are public (no auth needed).
+**Version:** 1.0  
+**Base URL:** `https://example.com` *(replace with your actual domain)*  
+**PHP:** 8.0+, no framework, no dependencies
 
 ---
 
-## Public Read Mode
+## Table of Contents
 
-Enable `PUBLIC_READ=true` in `.env` to allow browsers and users to access files directly via URL without authentication.
+1. [Authentication](#authentication)
+2. [Error Format](#error-format)
+3. [Upload Object](#1-upload-object)
+4. [Preview / Serve File](#2-preview--serve-file)
+5. [Get Object Metadata](#3-get-object-metadata)
+6. [Get Object (redirect)](#4-get-object-redirect)
+7. [List Objects in Bucket](#5-list-objects-in-bucket)
+8. [List All Buckets](#6-list-all-buckets)
+9. [Delete Object](#7-delete-object)
+10. [Naming Rules](#naming-rules)
+11. [Allowed File Types](#allowed-file-types)
+12. [HTTP Status Code Reference](#http-status-code-reference)
 
-### Use Cases
-- Serving images in web pages (`<img src="...">`)
-- Direct download links (`<a href="...">`)
-- Embedding resources in applications
+---
 
-### How It Works
+## Authentication
 
-| Endpoint | `PUBLIC_READ=false` | `PUBLIC_READ=true` |
-|----------|---------------------|-------------------|
-| `GET /files/:key` | 🔒 Auth required | 🌐 **PUBLIC** |
-| `HEAD /files/:key` | 🔒 Auth required | 🌐 **PUBLIC** |
-| All other endpoints | 🔒 Auth required | 🔒 Auth required |
+> **`preview.php` is public** — no key required (so shared links open in the browser).  
+> **All `/api/*` endpoints require authentication.**
 
-### Example Usage
+### Method
+
+Pass your API key in the `X-Api-Key` HTTP header (recommended):
+
+```
+X-Api-Key: your-secret-key
+```
+
+Or as a fallback query/body parameter `api_key` (avoid in production):
+
+```
+GET /api/list.php?bucket=docs&api_key=your-secret-key
+```
+
+### Configure the key
+
+Open `public_html/api/config.php` and set:
+
+```php
+define('API_KEY', 'your-secret-key-here');
+```
+
+Generate a strong key:
+
+```bash
+openssl rand -hex 40
+```
+
+### Auth error responses
+
+| Condition | Status | Message |
+|---|---|---|
+| Key not configured on server | `500` | `API key has not been configured on the server.` |
+| Missing or wrong key | `401` | `Unauthorized. Invalid or missing API key.` |
+
+---
+
+## Error Format
+
+All error responses are JSON with the following structure:
+
+```json
+{
+  "status": "error",
+  "message": "Human-readable error description."
+}
+```
+
+Some errors include additional fields, e.g.:
+
+```json
+{
+  "status": "error",
+  "message": "File type not allowed.",
+  "allowed": ["pdf", "png", "jpg", "..."]
+}
+```
+
+---
+
+## 1. Upload Object
+
+Upload a file into a bucket. The bucket is created automatically if it does not exist.
+
+### Request
+
+```
+POST /api/upload.php
+Content-Type: multipart/form-data
+X-Api-Key: your-secret-key
+```
+
+| Parameter | Type   | Required | Description |
+|-----------|--------|----------|-------------|
+| `bucket`  | string | ✅       | Target bucket name (3–63 chars, see [Naming Rules](#naming-rules)) |
+| `file`    | file   | ✅       | The file to upload (max 100 MB) |
+
+### Success Response — `200 OK`
+
+```json
+{
+  "status": "success",
+  "bucket": "documents",
+  "key":    "6613a8f1.23456_report.pdf",
+  "url":    "https://example.com/preview.php?bucket=documents&key=6613a8f1.23456_report.pdf",
+  "size":   204800
+}
+```
+
+| Field    | Type    | Description |
+|----------|---------|-------------|
+| `status` | string  | `"success"` |
+| `bucket` | string  | Bucket where the file was stored |
+| `key`    | string  | Auto-generated unique filename |
+| `url`    | string  | Public preview URL |
+| `size`   | integer | File size in bytes |
+
+### Error Responses
+
+| Status | Cause |
+|--------|-------|
+| `400`  | Missing `bucket` or `file` param, invalid bucket name |
+| `401`  | Missing or wrong API key |
+| `405`  | Non-POST request |
+| `413`  | File exceeds 100 MB limit |
+| `415`  | File extension not in whitelist, or forbidden MIME type detected |
+| `500`  | Server could not create bucket or save file |
+
+### cURL Example
+
+```bash
+curl -X POST https://example.com/api/upload.php \
+  -H "X-Api-Key: your-secret-key" \
+  -F "bucket=documents" \
+  -F "file=@/path/to/report.pdf"
+```
+
+### JavaScript (fetch) Example
+
+```javascript
+const form = new FormData();
+form.append('bucket', 'documents');
+form.append('file', fileInput.files[0]);
+
+const res = await fetch('https://example.com/api/upload.php', {
+  method: 'POST',
+  headers: { 'X-Api-Key': 'your-secret-key' },
+  body: form,
+});
+
+const data = await res.json();
+console.log(data.url); // preview link
+```
+
+---
+
+## 2. Preview / Serve File
+
+Serve a stored file directly in the browser (inline). No API key required — this endpoint is intentionally public so preview links can be shared freely.
+
+### Request
+
+```
+GET /preview.php?bucket={bucket}&key={key}
+```
+
+| Parameter | Type   | Required | Description |
+|-----------|--------|----------|-------------|
+| `bucket`  | string | ✅       | Bucket name |
+| `key`     | string | ✅       | Object key (filename) |
+
+### Behavior
+
+| File type | Browser behavior |
+|-----------|-----------------|
+| `pdf`     | Opens in PDF reader (inline) |
+| `png`, `jpg`, `jpeg`, `gif`, `webp`, `svg` | Displayed as image (inline) |
+| `mp4`, `webm` | Played in video player (inline, supports scrubbing) |
+| `mp3`, `ogg`, `wav` | Played in audio player (inline) |
+| `txt`, `html`, `htm` | Rendered as text/HTML (inline) |
+| `json`, `xml` | Rendered as plain text (inline) |
+| All other allowed types | Forced download (`attachment`) |
+
+### Response Headers
+
+```
+HTTP/1.1 200 OK
+Content-Type: application/pdf
+Content-Disposition: inline; filename="report.pdf"
+Content-Length: 204800
+Accept-Ranges: bytes
+Cache-Control: public, max-age=3600
+ETag: "5d41402abc4b2a76b9719d911017c592"
+X-Content-Type-Options: nosniff
+```
+
+### HTTP Range Requests (streaming)
+
+Video and audio files support seeking/scrubbing via the standard `Range` header:
+
+```
+Range: bytes=0-1048575
+```
+
+The server responds with `206 Partial Content`:
+
+```
+HTTP/1.1 206 Partial Content
+Content-Range: bytes 0-1048575/10485760
+Content-Length: 1048576
+```
+
+### Caching
+
+The server sets an `ETag` header. Subsequent requests with `If-None-Match` matching the ETag receive `304 Not Modified` with no body.
+
+### Error Responses
+
+| Status | Cause |
+|--------|-------|
+| `400`  | Missing `bucket` or `key`, invalid name format |
+| `403`  | Path traversal attempt detected |
+| `404`  | Bucket or object not found |
+| `416`  | Invalid `Range` header |
+| `500`  | Storage configuration error |
+
+### Example URLs
+
+```
+# Open PDF in browser
+https://example.com/preview.php?bucket=documents&key=6613a8f1.23456_report.pdf
+
+# Display image
+https://example.com/preview.php?bucket=photos&key=6613a8f1.23456_photo.jpg
+
+# Stream video
+https://example.com/preview.php?bucket=videos&key=6613a8f1.23456_clip.mp4
+```
+
+### HTML Embed Examples
 
 ```html
-<!-- When PUBLIC_READ=true, browsers can access directly -->
-<img src="http://your-server:3000/files/avatar.jpg" alt="Avatar">
-<a href="http://your-server:3000/files/document.pdf">Download PDF</a>
+<!-- Image -->
+<img src="https://example.com/preview.php?bucket=photos&key=abc_photo.jpg" alt="Photo">
+
+<!-- PDF (iframe) -->
+<iframe src="https://example.com/preview.php?bucket=docs&key=abc_report.pdf"
+        width="100%" height="600px"></iframe>
+
+<!-- Video -->
+<video controls>
+  <source src="https://example.com/preview.php?bucket=videos&key=abc_clip.mp4"
+          type="video/mp4">
+</video>
+
+<!-- Audio -->
+<audio controls>
+  <source src="https://example.com/preview.php?bucket=audio&key=abc_song.mp3"
+          type="audio/mpeg">
+</audio>
 ```
 
 ---
 
-## Usage Examples
+## 3. Get Object Metadata
 
-### Using cURL
+Return JSON metadata about a stored object without downloading the file.
 
-#### List all files
-```bash
-curl -H "Authorization: Bearer YOUR_TOKEN" http://localhost:3000/files
+### Request
+
+```
+GET /api/get.php?bucket={bucket}&key={key}&action=info
+X-Api-Key: your-secret-key
 ```
 
-#### Upload a file with specific key
-```bash
-curl -X PUT \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -F "file=@/path/to/your/file.txt" \
-  http://localhost:3000/files/myfile.txt
+| Parameter | Type   | Required | Description |
+|-----------|--------|----------|-------------|
+| `bucket`  | string | ✅       | Bucket name |
+| `key`     | string | ✅       | Object key |
+| `action`  | string | ✅       | Must be `info` to get JSON (omit to redirect instead) |
+
+### Success Response — `200 OK`
+
+```json
+{
+  "status":   "success",
+  "bucket":   "documents",
+  "key":      "6613a8f1.23456_report.pdf",
+  "url":      "https://example.com/preview.php?bucket=documents&key=6613a8f1.23456_report.pdf",
+  "size":     204800,
+  "mime":     "application/pdf",
+  "modified": "2026-03-12T14:00:00+00:00"
+}
 ```
 
-#### Upload a file with auto-generated key
-```bash
-curl -X POST \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -F "file=@/path/to/your/file.txt" \
-  http://localhost:3000/files
-```
+| Field      | Type    | Description |
+|------------|---------|-------------|
+| `status`   | string  | `"success"` |
+| `bucket`   | string  | Bucket name |
+| `key`      | string  | Object key |
+| `url`      | string  | Public preview URL |
+| `size`     | integer | File size in bytes |
+| `mime`     | string  | Detected MIME type |
+| `modified` | string  | Last-modified timestamp (ISO 8601 / RFC 3339) |
 
-#### Download a file (with auth)
-```bash
-curl -H "Authorization: Bearer YOUR_TOKEN" \
-  http://localhost:3000/files/myfile.txt \
-  -o downloaded-file.txt
-```
+### Error Responses
 
-#### Download a file (PUBLIC_READ=true, no auth needed)
-```bash
-curl http://localhost:3000/files/myfile.txt -o downloaded-file.txt
-```
+| Status | Cause |
+|--------|-------|
+| `400`  | Missing or invalid `bucket` / `key` |
+| `401`  | Missing or wrong API key |
+| `403`  | Path traversal attempt |
+| `404`  | Object not found |
+| `405`  | Non-GET request |
 
-#### Get file metadata
-```bash
-curl -I -H "Authorization: Bearer YOUR_TOKEN" \
-  http://localhost:3000/files/myfile.txt
-```
+### cURL Example
 
-#### Delete a file
 ```bash
-curl -X DELETE \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  http://localhost:3000/files/myfile.txt
+curl "https://example.com/api/get.php?bucket=documents&key=6613a8f1.23456_report.pdf&action=info" \
+  -H "X-Api-Key: your-secret-key"
 ```
 
 ---
 
-### Using Node.js
+## 4. Get Object (redirect)
 
-#### Setup
-```bash
-npm install node-fetch form-data
+Redirect the browser to `preview.php` for a given object. Useful as a stable API URL that always resolves to the preview.
+
+### Request
+
+```
+GET /api/get.php?bucket={bucket}&key={key}
+X-Api-Key: your-secret-key
 ```
 
-#### Complete Node.js Client Example
+*(Omit `action=info` to trigger the redirect)*
+
+### Response — `302 Found`
+
+```
+Location: https://example.com/preview.php?bucket=documents&key=6613a8f1.23456_report.pdf
+```
+
+---
+
+## 5. List Objects in Bucket
+
+Return a JSON list of all files stored in a bucket, sorted newest-first.
+
+### Request
+
+```
+GET /api/list.php?bucket={bucket}
+X-Api-Key: your-secret-key
+```
+
+| Parameter | Type   | Required | Description |
+|-----------|--------|----------|-------------|
+| `bucket`  | string | ✅       | Bucket to list |
+
+### Success Response — `200 OK`
+
+```json
+{
+  "status": "success",
+  "bucket": "documents",
+  "count":  2,
+  "files": [
+    {
+      "key":      "6613a8f1.23456_report.pdf",
+      "url":      "https://example.com/preview.php?bucket=documents&key=6613a8f1.23456_report.pdf",
+      "size":     204800,
+      "modified": "2026-03-12T14:00:00+00:00"
+    },
+    {
+      "key":      "5502b7e0.12345_invoice.pdf",
+      "url":      "https://example.com/preview.php?bucket=documents&key=5502b7e0.12345_invoice.pdf",
+      "size":     98304,
+      "modified": "2026-03-10T09:30:00+00:00"
+    }
+  ]
+}
+```
+
+| Field    | Type    | Description |
+|----------|---------|-------------|
+| `status` | string  | `"success"` |
+| `bucket` | string  | Bucket name |
+| `count`  | integer | Number of files |
+| `files`  | array   | Array of file objects (see below) |
+
+**Each file object:**
+
+| Field      | Type    | Description |
+|------------|---------|-------------|
+| `key`      | string  | Object key |
+| `url`      | string  | Public preview URL |
+| `size`     | integer | File size in bytes |
+| `modified` | string  | Last-modified timestamp (ISO 8601) |
+
+### Error Responses
+
+| Status | Cause |
+|--------|-------|
+| `400`  | Invalid bucket name |
+| `401`  | Missing or wrong API key |
+| `404`  | Bucket does not exist |
+| `405`  | Non-GET request |
+
+### cURL Example
+
+```bash
+curl "https://example.com/api/list.php?bucket=documents" \
+  -H "X-Api-Key: your-secret-key"
+```
+
+---
+
+## 6. List All Buckets
+
+Omit the `bucket` parameter from `list.php` to get a list of all available bucket names.
+
+### Request
+
+```
+GET /api/list.php
+X-Api-Key: your-secret-key
+```
+
+### Success Response — `200 OK`
+
+```json
+{
+  "status": "success",
+  "buckets": ["documents", "photos", "videos"]
+}
+```
+
+### cURL Example
+
+```bash
+curl "https://example.com/api/list.php" \
+  -H "X-Api-Key: your-secret-key"
+```
+
+---
+
+## 7. Delete Object
+
+Permanently delete a file from a bucket. If the bucket becomes empty after deletion, the bucket directory is also removed automatically.
+
+### Request
+
+```
+POST /api/delete.php
+X-Api-Key: your-secret-key
+```
+
+Accepts two content types:
+
+**Option A — Form data:**
+
+```
+Content-Type: application/x-www-form-urlencoded
+
+bucket=documents&key=6613a8f1.23456_report.pdf
+```
+
+**Option B — JSON body:**
+
+```
+Content-Type: application/json
+
+{
+  "bucket": "documents",
+  "key":    "6613a8f1.23456_report.pdf"
+}
+```
+
+| Parameter | Type   | Required | Description |
+|-----------|--------|----------|-------------|
+| `bucket`  | string | ✅       | Bucket containing the file |
+| `key`     | string | ✅       | Object key to delete |
+
+### Success Response — `200 OK`
+
+```json
+{
+  "status": "success",
+  "bucket": "documents",
+  "key":    "6613a8f1.23456_report.pdf"
+}
+```
+
+### Error Responses
+
+| Status | Cause |
+|--------|-------|
+| `400`  | Missing or invalid `bucket` / `key`, malformed JSON |
+| `401`  | Missing or wrong API key |
+| `403`  | Path traversal attempt |
+| `404`  | Object not found |
+| `405`  | Non-POST request |
+| `500`  | File deletion failed (permissions issue) |
+
+### cURL Examples
+
+```bash
+# Form data
+curl -X POST https://example.com/api/delete.php \
+  -H "X-Api-Key: your-secret-key" \
+  -d "bucket=documents&key=6613a8f1.23456_report.pdf"
+
+# JSON body
+curl -X POST https://example.com/api/delete.php \
+  -H "X-Api-Key: your-secret-key" \
+  -H "Content-Type: application/json" \
+  -d '{"bucket":"documents","key":"6613a8f1.23456_report.pdf"}'
+```
+
+### JavaScript (fetch) Example
 
 ```javascript
-import fetch from 'node-fetch';
-import FormData from 'form-data';
-import fs from 'fs';
+const res = await fetch('https://example.com/api/delete.php', {
+  method: 'POST',
+  headers: {
+    'X-Api-Key': 'your-secret-key',
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({ bucket: 'documents', key: '6613a8f1.23456_report.pdf' }),
+});
 
-const API_URL = 'http://localhost:3000';
-const API_TOKEN = 'your-token-here';
-
-const headers = {
-  'Authorization': `Bearer ${API_TOKEN}`
-};
-
-// List all files
-async function listFiles() {
-  const response = await fetch(`${API_URL}/files`, { headers });
-  const data = await response.json();
-  console.log('Files:', data);
-  return data;
-}
-
-// Upload a file with specific key
-async function uploadFile(filePath, key) {
-  const form = new FormData();
-  form.append('file', fs.createReadStream(filePath));
-
-  const response = await fetch(`${API_URL}/files/${key}`, {
-    method: 'PUT',
-    headers: {
-      ...headers,
-      ...form.getHeaders()
-    },
-    body: form
-  });
-
-  const data = await response.json();
-  console.log('Upload result:', data);
-  return data;
-}
-
-// Upload with auto-generated key
-async function uploadFileAuto(filePath) {
-  const form = new FormData();
-  form.append('file', fs.createReadStream(filePath));
-
-  const response = await fetch(`${API_URL}/files`, {
-    method: 'POST',
-    headers: {
-      ...headers,
-      ...form.getHeaders()
-    },
-    body: form
-  });
-
-  const data = await response.json();
-  console.log('Upload result:', data);
-  return data;
-}
-
-// Download a file (works without auth if PUBLIC_READ=true)
-async function downloadFile(key, outputPath, useAuth = true) {
-  const options = useAuth ? { headers } : {};
-  const response = await fetch(`${API_URL}/files/${key}`, options);
-
-  if (!response.ok) {
-    throw new Error(`Download failed: ${response.status}`);
-  }
-
-  const buffer = await response.buffer();
-  fs.writeFileSync(outputPath, buffer);
-  console.log(`Downloaded to ${outputPath}`);
-}
-
-// Download as stream (memory efficient for large files)
-async function downloadFileStream(key, outputPath, useAuth = true) {
-  const options = useAuth ? { headers } : {};
-  const response = await fetch(`${API_URL}/files/${key}`, options);
-
-  if (!response.ok) {
-    throw new Error(`Download failed: ${response.status}`);
-  }
-
-  const fileStream = fs.createWriteStream(outputPath);
-  await new Promise((resolve, reject) => {
-    response.body.pipe(fileStream);
-    response.body.on('error', reject);
-    fileStream.on('finish', resolve);
-  });
-
-  console.log(`Downloaded to ${outputPath}`);
-}
-
-// Get file metadata
-async function getFileMetadata(key) {
-  const response = await fetch(`${API_URL}/files/${key}`, {
-    method: 'HEAD',
-    headers
-  });
-
-  const metadata = {
-    size: response.headers.get('content-length'),
-    lastModified: response.headers.get('last-modified'),
-    etag: response.headers.get('etag')
-  };
-
-  console.log('Metadata:', metadata);
-  return metadata;
-}
-
-// Delete a file
-async function deleteFile(key) {
-  const response = await fetch(`${API_URL}/files/${key}`, {
-    method: 'DELETE',
-    headers
-  });
-
-  const data = await response.json();
-  console.log('Delete result:', data);
-  return data;
-}
-
-// Example usage
-async function main() {
-  try {
-    // List files
-    await listFiles();
-
-    // Upload a file
-    await uploadFile('./myfile.txt', 'myfile.txt');
-
-    // Get metadata
-    await getFileMetadata('myfile.txt');
-
-    // Download the file (no auth needed if PUBLIC_READ=true)
-    await downloadFile('myfile.txt', './downloaded.txt', false);
-
-    // Delete the file
-    await deleteFile('myfile.txt');
-
-    // List files again
-    await listFiles();
-  } catch (error) {
-    console.error('Error:', error.message);
-  }
-}
-
-main();
+const data = await res.json();
+// { "status": "success", "bucket": "documents", "key": "..." }
 ```
 
 ---
 
-### Using Python
+## Naming Rules
 
-```python
-import requests
+### Bucket name
 
-API_URL = 'http://localhost:3000'
-API_TOKEN = 'your-token-here'
+| Rule | Detail |
+|------|--------|
+| Length | 3 – 63 characters |
+| Characters | Letters (`a-z`, `A-Z`), digits (`0-9`), hyphens (`-`), underscores (`_`) |
+| Must start with | A letter or digit |
+| Examples (valid) | `documents`, `my-bucket`, `Photos_2026` |
+| Examples (invalid) | `-bucket`, `ab`, `bucket@name`, `my/bucket` |
 
-headers = {
-    'Authorization': f'Bearer {API_TOKEN}'
-}
+### Object key
 
-# List all files
-def list_files():
-    response = requests.get(f'{API_URL}/files', headers=headers)
-    return response.json()
-
-# Upload a file
-def upload_file(file_path, key):
-    with open(file_path, 'rb') as f:
-        files = {'file': f}
-        response = requests.put(
-            f'{API_URL}/files/{key}',
-            headers=headers,
-            files=files
-        )
-    return response.json()
-
-# Download a file (no auth needed if PUBLIC_READ=true)
-def download_file(key, output_path, use_auth=True):
-    h = headers if use_auth else {}
-    response = requests.get(f'{API_URL}/files/{key}', headers=h)
-    with open(output_path, 'wb') as f:
-        f.write(response.content)
-
-# Delete a file
-def delete_file(key):
-    response = requests.delete(f'{API_URL}/files/{key}', headers=headers)
-    return response.json()
-
-# Example usage
-if __name__ == '__main__':
-    print(list_files())
-    print(upload_file('myfile.txt', 'myfile.txt'))
-    download_file('myfile.txt', 'downloaded.txt', use_auth=False)  # No auth if PUBLIC_READ=true
-    print(delete_file('myfile.txt'))
-```
+| Rule | Detail |
+|------|--------|
+| Length | 1 – 255 characters |
+| Characters | Letters, digits, hyphens, underscores, dots (`.`) |
+| Must start with | A letter or digit (no leading dot) |
+| Note | Keys are auto-generated by `upload.php` — you never need to choose one manually |
 
 ---
 
-### Using Browser (Fetch API)
+## Allowed File Types
 
-```javascript
-const API_URL = 'http://localhost:3000';
-const API_TOKEN = 'your-token-here';
+Files with extensions outside this list are rejected at upload time.
 
-const headers = {
-  'Authorization': `Bearer ${API_TOKEN}`
-};
+| Category | Extensions |
+|----------|-----------|
+| Documents | `pdf` `doc` `docx` `xls` `xlsx` `ppt` `pptx` `csv` `txt` |
+| Images | `png` `jpg` `jpeg` `gif` `webp` `svg` `bmp` `ico` |
+| Web / Text | `html` `htm` `json` `xml` |
+| Archives | `zip` `tar` `gz` |
+| Video | `mp4` `webm` |
+| Audio | `mp3` `ogg` `wav` |
 
-// List all files
-async function listFiles() {
-  const response = await fetch(`${API_URL}/files`, { headers });
-  return response.json();
-}
-
-// Upload a file from input element
-async function uploadFile(fileInput, key) {
-  const formData = new FormData();
-  formData.append('file', fileInput.files[0]);
-
-  const response = await fetch(`${API_URL}/files/${key}`, {
-    method: 'PUT',
-    headers: { 'Authorization': `Bearer ${API_TOKEN}` },
-    body: formData
-  });
-
-  return response.json();
-}
-
-// Download a file (no auth needed if PUBLIC_READ=true)
-async function downloadFile(key) {
-  // If PUBLIC_READ=true, just open the URL directly
-  window.open(`${API_URL}/files/${key}`, '_blank');
-}
-
-// Delete a file
-async function deleteFile(key) {
-  const response = await fetch(`${API_URL}/files/${key}`, {
-    method: 'DELETE',
-    headers
-  });
-  return response.json();
-}
-
-// Direct usage in HTML (when PUBLIC_READ=true)
-// <img src="http://localhost:3000/files/image.jpg">
-// <a href="http://localhost:3000/files/document.pdf">Download</a>
-```
+Executables (`php`, `cgi`, `sh`, `exe`, etc.) are **never** accepted, and disguised files (wrong MIME type for the extension) are also blocked.
 
 ---
 
-## Deployment with PM2
+## HTTP Status Code Reference
 
-### Option 1: Simple command (recommended)
-
-Add this to your startup script:
-```bash
-npx pm2 start ./path/to/server.js --name simples3 -i max --env ENABLE_CLUSTER=false
-```
-
-The `-i max` uses PM2's cluster mode, and `--env ENABLE_CLUSTER=false` disables the built-in cluster to avoid double-clustering.
-
-### Option 2: Using ecosystem.config.cjs
-
-```bash
-npm run pm2:start    # Start with PM2 cluster mode
-npm run pm2:stop     # Stop the app
-npm run pm2:restart  # Restart all workers
-npm run pm2:logs     # View logs
-npm run pm2:status   # Check status
-```
-
----
-
-## Performance Optimizations
-
-| Optimization | Description |
-|--------------|-------------|
-| **Cluster Mode** | Uses all CPU cores for parallel request handling |
-| **Gzip Compression** | Compresses responses > 1KB to reduce bandwidth |
-| **Streaming** | Streams large files instead of buffering in memory |
-| **ETag Caching** | Client-side caching with `304 Not Modified` support |
-| **Metadata Cache** | In-memory cache for file stats (5s TTL) |
-| **Keep-Alive** | Reuses TCP connections (30s timeout) |
-
-## Security Features
-
-- **Bearer Token Auth** - All write operations protected with constant-time comparison
-- **Timing-Safe Comparison** - Prevents timing attacks on token validation
-- **Path Traversal Protection** - Sanitizes file keys to prevent directory escape
-- **File Size Limit** - 100MB maximum upload size
-- **Optional Public Read** - Configurable public access for read operations only
-
-## License
-
-MIT
+| Code | Meaning |
+|------|---------|
+| `200` | OK — request succeeded |
+| `206` | Partial Content — serving a byte range (streaming) |
+| `302` | Found — redirecting to preview URL |
+| `304` | Not Modified — ETag matched, browser can use its cache |
+| `400` | Bad Request — missing/invalid parameter |
+| `401` | Unauthorized — API key missing or wrong |
+| `403` | Forbidden — path traversal attempt blocked |
+| `404` | Not Found — bucket or object does not exist |
+| `405` | Method Not Allowed — wrong HTTP method used |
+| `413` | Content Too Large — file exceeds 100 MB |
+| `415` | Unsupported Media Type — file extension or MIME type not allowed |
+| `416` | Range Not Satisfiable — invalid `Range` header |
+| `500` | Internal Server Error — server-side failure |

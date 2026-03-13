@@ -5,7 +5,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth"; // Assuming authOptions is exported here, if not need to find it
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
-import { uploadToFileServer, getPublicFileUrl } from "@/lib/fileServer";
+import { uploadToFileServerLegacy as uploadToFileServer, getPublicFileUrl } from "@/lib/fileServer";
 import path from "path";
 
 export async function getUserProfile() {

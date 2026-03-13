@@ -4,22 +4,31 @@ import prisma from "@/lib/prisma";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { trxid, status } = body;
-    // const signature = req.headers.get("X-YoGateway-Signature");
-    
-    // Validate Signature... (skipped for brevity)
+    const trxId = String(body?.trx_id || "").trim();
+    const referenceId = String(body?.reference_id || "").trim();
+    const status = String(body?.status || "").toLowerCase();
 
-    if (status === "SUCCESS") {
+    const whereClause = trxId
+      ? { paymentTrxId: trxId }
+      : referenceId.startsWith("TEAM-")
+      ? { id: referenceId.slice("TEAM-".length) }
+      : null;
+
+    if (!whereClause) {
+      return NextResponse.json({ status: false, message: "Payment reference not found" }, { status: 404 });
+    }
+
+    if (status === "paid") {
       await prisma.team.update({
-        where: { paymentTrxId: trxid },
+        where: whereClause,
         data: {
           paymentStatus: "PAID",
           paidAt: new Date(),
         },
       });
-    } else if (status === "EXPIRED") {
+    } else if (status === "expired" || status === "cancelled") {
        await prisma.team.update({
-        where: { paymentTrxId: trxid },
+        where: whereClause,
         data: {
           paymentStatus: "EXPIRED",
         },

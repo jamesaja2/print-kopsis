@@ -2,10 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import {
-    buildUploadKey,
-    buildUploadUrl,
-    getFileServerUploadHeaders,
-    getPublicFileUrl,
+    getFileServerBaseUrl,
 } from "@/lib/fileServer";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from "@/lib/uploadLimits";
 
@@ -16,13 +13,13 @@ type PresignPayload = {
 
 type PresignResponseSuccess = {
     success: true;
-    key: string;
     uploadUrl: string;
     method: string;
     headers: Record<string, string>;
-    publicUrl: string | null;
+    bucket: string;
     maxUploadBytes: number;
     maxUploadMb: number;
+    note: string;
 };
 
 type PresignResponseError = {
@@ -32,6 +29,11 @@ type PresignResponseError = {
 
 type PresignResponse = PresignResponseSuccess | PresignResponseError;
 
+/**
+ * NOTE: The new file server API auto-generates keys on upload.
+ * This endpoint now returns the upload endpoint URL and bucket info,
+ * but the actual key and public URL are only available after upload completes.
+ */
 export async function POST(request: NextRequest) {
     const session = await getServerSession(authOptions);
 
@@ -49,25 +51,29 @@ export async function POST(request: NextRequest) {
         // Empty bodies are allowed
     }
 
-    const folder = (payload.folder?.trim() || "uploads").slice(0, 128);
-    const filenameInput = payload.filename?.trim();
-    const filename = filenameInput && filenameInput.length > 0 ? filenameInput : `upload-${Date.now()}`;
+    const bucket = (payload.folder?.trim() || "uploads").slice(0, 63);
 
     try {
-        const key = buildUploadKey(filename, folder);
-        const uploadUrl = buildUploadUrl(key);
-        const publicUrl = getPublicFileUrl(key);
-        const headers = getFileServerUploadHeaders();
+        // Ensure file server config is valid during target preparation.
+        getFileServerBaseUrl();
+        const uploadUrl = "/api/upload";
+        const headers: Record<string, string> = {};
+
+        console.log("🔧 Presign upload info:", {
+            uploadUrl,
+            bucket,
+            mode: "proxy",
+        });
 
         return NextResponse.json<PresignResponse>({
             success: true,
-            key,
             uploadUrl,
-            method: "PUT",
+            method: "POST",
             headers,
-            publicUrl,
+            bucket,
             maxUploadBytes: MAX_UPLOAD_BYTES,
             maxUploadMb: MAX_UPLOAD_MB,
+            note: "The server will auto-generate the file key. Send file + bucket in multipart/form-data. Response will include: { bucket, key, url, size }",
         });
     } catch (error) {
         console.error("Failed to prepare upload target", error);

@@ -3,7 +3,7 @@
 import prisma from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import path from "path";
-import { uploadToFileServer, getPublicFileUrl, deleteFromFileServer, extractFileKey } from "@/lib/fileServer";
+import { uploadToFileServerLegacy as uploadToFileServer, getPublicFileUrl, deleteFromFileServerLegacy as deleteFromFileServer, extractFileKey } from "@/lib/fileServer";
 
 type SliderRecord = {
     key: string;

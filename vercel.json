@@ -2,5 +2,11 @@
   "buildCommand": "npx prisma generate && next build",
   "installCommand": "npm install",
   "framework": "nextjs",
-  "regions": ["sin1"]
+  "regions": ["sin1"],
+  "crons": [
+    {
+      "path": "/api/cron/orders-cleanup",
+      "schedule": "0 2 * * *"
+    }
+  ]
 }

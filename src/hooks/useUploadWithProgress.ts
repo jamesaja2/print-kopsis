@@ -10,13 +10,13 @@ type UploadResponse = {
 
 type UploadTargetSuccess = {
   success: true;
-  key: string;
   uploadUrl: string;
   method?: string;
   headers?: Record<string, string>;
-  publicUrl: string | null;
+  bucket: string;
   maxUploadBytes: number;
   maxUploadMb: number;
+  note?: string;
 };
 
 type UploadTargetError = {
@@ -25,6 +25,14 @@ type UploadTargetError = {
 };
 
 type UploadTargetResponse = UploadTargetSuccess | UploadTargetError;
+
+type FileServerUploadResponse = {
+  status: string;
+  bucket: string;
+  key: string;
+  url: string;
+  size: number;
+};
 
 export function useUploadWithProgress() {
   const [progress, setProgress] = useState(0);
@@ -60,7 +68,11 @@ export function useUploadWithProgress() {
       return new Promise<UploadResponse>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         const formData = new FormData();
+        
+        // Upload through same-origin API proxy to avoid browser CORS issues.
+        formData.append("bucket", target.bucket);
         formData.append("file", file, resolvedFilename);
+        formData.append("filename", resolvedFilename);
 
         xhr.upload.onprogress = (event) => {
           if (event.lengthComputable) {
@@ -72,10 +84,35 @@ export function useUploadWithProgress() {
         xhr.onreadystatechange = () => {
           if (xhr.readyState === XMLHttpRequest.DONE) {
             if (xhr.status >= 200 && xhr.status < 300) {
-              resolve({ success: true, key: target.key, url: target.publicUrl });
+              try {
+                // Parse JSON response from upload API (proxied to file server)
+                const response: FileServerUploadResponse = JSON.parse(xhr.responseText);
+
+                if (response.status === "success") {
+                  resolve({ 
+                    success: true, 
+                    key: response.key, 
+                    url: response.url 
+                  });
+                } else {
+                  reject(new Error("Upload failed: Server returned unsuccessful status"));
+                }
+              } catch (err) {
+                reject(new Error("Failed to parse server response"));
+              }
             } else {
-              const message = xhr.responseText || "Upload failed";
-              reject(new Error(message));
+              // Try to parse error message from JSON response
+              let message = "Upload failed";
+              try {
+                const errorResponse = JSON.parse(xhr.responseText);
+                message = errorResponse.message || xhr.responseText || message;
+              } catch {
+                message = xhr.responseText || message;
+              }
+
+              // Include status in error message for better debugging
+              const detailedMessage = `Upload failed (${xhr.status}): ${message}`;
+              reject(new Error(detailedMessage));
             }
           }
         };
@@ -84,7 +121,7 @@ export function useUploadWithProgress() {
           reject(new Error("Network error while uploading"));
         };
 
-        xhr.open(target.method || "PUT", target.uploadUrl, true);
+        xhr.open("POST", "/api/upload", true);
         if (target.headers) {
           Object.entries(target.headers).forEach(([header, value]) => {
             if (value) {
