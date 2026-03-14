@@ -23,14 +23,14 @@ export default function AuthLayout({
               <div className="flex flex-col items-center max-w-xs">
                 <Link href="/" className="block mb-4">
                   <Image
-                    width={231}
-                    height={48}
+                    width={100}
+                    height={100}
                     src="/images/logo/logoscale.png"
                     alt="Logo"
                   />
                 </Link>
                 <p className="text-center text-gray-400 dark:text-white/60">
-                  Pendaftaran & Login S.C.A.L.E Dashboard
+                  Pendaftaran & Login KOPSIS Print
                 </p>
               </div>
             </div>
