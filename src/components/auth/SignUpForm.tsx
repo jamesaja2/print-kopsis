@@ -57,7 +57,7 @@ export default function SignUpForm() {
       <div className="flex flex-col justify-center flex-1 w-full max-w-md mx-auto">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Sign Up</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">Create your account for Bazaar</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Create your account</p>
         </div>
 
         <div className="space-y-4">

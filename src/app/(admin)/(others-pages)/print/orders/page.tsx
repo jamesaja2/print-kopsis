@@ -159,42 +159,77 @@ function DuplexSvg({
   orientation: "portrait" | "landscape";
 }) {
   const isLandscape = orientation === "landscape";
-  const pageWidth = isLandscape ? 58 : 42;
-  const pageHeight = isLandscape ? 42 : 58;
+  const pageWidth = isLandscape ? 94 : 70;
+  const pageHeight = isLandscape ? 64 : 92;
+
+  const leftX = 38;
+  const rightX = 194;
+  const pageY = 24;
+  const centerY = pageY + pageHeight / 2;
+
+  const modeLabel = mode === "single" ? "Single Side" : mode === "long_edge" ? "Duplex Long Edge" : "Duplex Short Edge";
+  const flipLabel = mode === "long_edge" ? "Balik sisi panjang" : mode === "short_edge" ? "Balik sisi pendek" : "Tanpa balik";
 
   return (
-    <svg viewBox="0 0 240 140" className="h-32 w-full rounded-lg border border-blue-light-200 bg-white dark:border-blue-light-800 dark:bg-gray-900">
-      <rect x="36" y="28" width={pageWidth} height={pageHeight} rx="4" fill="#F5F8FF" stroke="#465FFF" strokeWidth="2" />
-      <text x="57" y="55" textAnchor="middle" fontSize="10" fill="#3641F5" fontWeight="600">Front</text>
-      <text x="57" y="68" textAnchor="middle" fontSize="9" fill="#3641F5">Page 1</text>
+    <svg viewBox="0 0 320 190" className="h-36 w-full rounded-xl border border-blue-light-200 bg-white md:h-48 dark:border-blue-light-800 dark:bg-gray-900">
+      <rect x="10" y="10" width="300" height="170" rx="14" fill="#F8FAFC" stroke="#E4E7EC" />
 
-      {mode !== "single" && (
+      {mode === "single" ? (
         <>
-          <rect x="146" y="28" width={pageWidth} height={pageHeight} rx="4" fill="#EEFCE8" stroke="#12B76A" strokeWidth="2" />
-          <text x="167" y="55" textAnchor="middle" fontSize="10" fill="#039855" fontWeight="600">Back</text>
-          <text x="167" y="68" textAnchor="middle" fontSize="9" fill="#039855">Page 2</text>
+          <rect x="122" y={pageY + 8} width={pageWidth} height={pageHeight} rx="8" fill="#EEF4FF" stroke="#6172F3" strokeWidth="2" />
+          <rect x="112" y={pageY} width={pageWidth} height={pageHeight} rx="8" fill="#FFFFFF" stroke="#465FFF" strokeWidth="2" />
+          <circle cx="127" cy={pageY + 12} r="10" fill="#465FFF" />
+          <text x="127" y={pageY + 16} textAnchor="middle" fontSize="11" fill="#FFFFFF" fontWeight="700">1</text>
+          <text x="147" y={centerY - 6} textAnchor="middle" fontSize="11" fill="#344054" fontWeight="700">Front</text>
+          <text x="147" y={centerY + 11} textAnchor="middle" fontSize="10" fill="#475467">Page 1</text>
 
+          <rect x="178" y={pageY + 54} width="82" height="30" rx="7" fill="#F2F4F7" stroke="#D0D5DD" />
+          <text x="219" y={pageY + 72} textAnchor="middle" fontSize="10" fill="#667085">Halaman belakang kosong</text>
+        </>
+      ) : (
+        <>
           {mode === "long_edge" ? (
-            <path d="M 98 48 C 122 30, 140 30, 143 48" fill="none" stroke="#0BA5EC" strokeWidth="2.5" markerEnd="url(#arrow)" />
+            <>
+              <rect x={leftX} y={pageY} width={pageWidth} height={pageHeight} rx="8" fill="#F5F8FF" stroke="#465FFF" strokeWidth="2" />
+              <circle cx={leftX + 15} cy={pageY + 12} r="10" fill="#465FFF" />
+              <text x={leftX + 15} y={pageY + 16} textAnchor="middle" fontSize="11" fill="#FFFFFF" fontWeight="700">1</text>
+              <text x={leftX + pageWidth / 2} y={centerY - 6} textAnchor="middle" fontSize="11" fill="#344054" fontWeight="700">Front</text>
+              <text x={leftX + pageWidth / 2} y={centerY + 11} textAnchor="middle" fontSize="10" fill="#475467">Page 1</text>
+
+              <rect x={rightX} y={pageY} width={pageWidth} height={pageHeight} rx="8" fill="#ECFDF3" stroke="#12B76A" strokeWidth="2" />
+              <circle cx={rightX + 15} cy={pageY + 12} r="10" fill="#12B76A" />
+              <text x={rightX + 15} y={pageY + 16} textAnchor="middle" fontSize="11" fill="#FFFFFF" fontWeight="700">2</text>
+              <text x={rightX + pageWidth / 2} y={centerY - 6} textAnchor="middle" fontSize="11" fill="#027A48" fontWeight="700">Back</text>
+              <text x={rightX + pageWidth / 2} y={centerY + 11} textAnchor="middle" fontSize="10" fill="#039855">Page 2</text>
+
+              <rect x="134" y="28" width="52" height="18" rx="6" fill="#E0F2FE" stroke="#7DD3FC" />
+              <text x="160" y="40" textAnchor="middle" fontSize="9" fill="#0369A1">Long edge</text>
+            </>
           ) : (
-            <path d="M 98 76 C 122 104, 140 104, 143 76" fill="none" stroke="#FB6514" strokeWidth="2.5" markerEnd="url(#arrow)" />
+            <>
+              <rect x="124" y="20" width="72" height="56" rx="8" fill="#F5F8FF" stroke="#465FFF" strokeWidth="2" />
+              <circle cx="139" cy="32" r="10" fill="#465FFF" />
+              <text x="139" y="36" textAnchor="middle" fontSize="11" fill="#FFFFFF" fontWeight="700">1</text>
+              <text x="160" y="50" textAnchor="middle" fontSize="11" fill="#344054" fontWeight="700">Front</text>
+              <text x="160" y="64" textAnchor="middle" fontSize="10" fill="#475467">Page 1</text>
+
+              <rect x="124" y="82" width="72" height="56" rx="8" fill="#ECFDF3" stroke="#12B76A" strokeWidth="2" />
+              <circle cx="139" cy="94" r="10" fill="#12B76A" />
+              <text x="139" y="98" textAnchor="middle" fontSize="11" fill="#FFFFFF" fontWeight="700">2</text>
+              <text x="160" y="112" textAnchor="middle" fontSize="11" fill="#027A48" fontWeight="700">Back</text>
+              <text x="160" y="126" textAnchor="middle" fontSize="10" fill="#039855">Page 2</text>
+
+              <rect x="206" y="84" width="70" height="18" rx="6" fill="#FEE4E2" stroke="#FDA29B" />
+              <text x="241" y="96" textAnchor="middle" fontSize="9" fill="#B42318">Short edge</text>
+            </>
           )}
         </>
       )}
 
-      {mode === "single" && (
-        <text x="124" y="70" textAnchor="middle" fontSize="11" fill="#667085">Single side only</text>
-      )}
-
-      <text x="120" y="124" textAnchor="middle" fontSize="10" fill="#475467">
-        {orientation === "portrait" ? "Portrait" : "Landscape"} · {mode === "long_edge" ? "Long Edge" : mode === "short_edge" ? "Short Edge" : "Single"}
+      <rect x="26" y="146" width="268" height="24" rx="8" fill="#FFFFFF" stroke="#D0D5DD" />
+      <text x="160" y="162" textAnchor="middle" fontSize="10" fill="#475467" fontWeight="600">
+        {orientation === "portrait" ? "Portrait" : "Landscape"} · {modeLabel} · {flipLabel}
       </text>
-
-      <defs>
-        <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
-          <path d="M0,0 L0,6 L8,3 z" fill="#0BA5EC" />
-        </marker>
-      </defs>
     </svg>
   );
 }
