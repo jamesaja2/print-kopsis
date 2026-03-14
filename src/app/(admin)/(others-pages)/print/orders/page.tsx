@@ -199,6 +199,141 @@ function DuplexSvg({
   );
 }
 
+function getPaperRatio(paperSize: "A4" | "F4", orientation: "portrait" | "landscape") {
+  const portraitRatio = paperSize === "A4" ? 210 / 297 : 215 / 330;
+  return orientation === "portrait" ? portraitRatio : 1 / portraitRatio;
+}
+
+function PdfPreviewCanvas({
+  file,
+  paperSize,
+  orientation,
+  zoom,
+  margin,
+  colorMode,
+}: {
+  file: File | null;
+  paperSize: "A4" | "F4";
+  orientation: "portrait" | "landscape";
+  zoom: number;
+  margin: number;
+  colorMode: "grayscale" | "color";
+}) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const renderPreview = async () => {
+      if (!canvasRef.current) return;
+
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      // Keep a stable paper-like frame even when no file is selected.
+      const paperRatio = getPaperRatio(paperSize, orientation);
+      const outputWidth = 1200;
+      const outputHeight = Math.round(outputWidth / paperRatio);
+
+      canvas.width = outputWidth;
+      canvas.height = outputHeight;
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillRect(0, 0, outputWidth, outputHeight);
+
+      if (!file) {
+        return;
+      }
+
+      setLoading(true);
+      setPreviewError(null);
+
+      try {
+        const fileBytes = new Uint8Array(await file.arrayBuffer());
+        const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+
+        pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.mjs", import.meta.url).toString();
+
+        const loadingTask = pdfjs.getDocument({ data: fileBytes });
+        const pdf = await loadingTask.promise;
+        const page = await pdf.getPage(1);
+
+        const viewport = page.getViewport({ scale: 1 });
+        const previewScale = outputWidth / 420;
+        const marginPx = Math.round(margin * previewScale);
+        const printableWidth = Math.max(200, outputWidth - marginPx * 2);
+        const printableHeight = Math.max(200, outputHeight - marginPx * 2);
+
+        const fitScale = Math.min(printableWidth / viewport.width, printableHeight / viewport.height);
+        const renderScale = fitScale * (zoom / 100);
+        const scaledViewport = page.getViewport({ scale: renderScale });
+
+        const renderCanvas = document.createElement("canvas");
+        renderCanvas.width = Math.max(1, Math.floor(scaledViewport.width));
+        renderCanvas.height = Math.max(1, Math.floor(scaledViewport.height));
+        const renderCtx = renderCanvas.getContext("2d");
+        if (!renderCtx) {
+          throw new Error("Unable to initialize PDF preview context");
+        }
+
+        await page.render({
+          canvasContext: renderCtx,
+          viewport: scaledViewport,
+        }).promise;
+
+        if (cancelled) return;
+
+        const drawX = Math.round((outputWidth - renderCanvas.width) / 2);
+        const drawY = Math.round((outputHeight - renderCanvas.height) / 2);
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(0, 0, outputWidth, outputHeight);
+        ctx.drawImage(renderCanvas, drawX, drawY);
+      } catch {
+        if (!cancelled) {
+          setPreviewError("Preview tidak dapat dirender. Pastikan file PDF valid.");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    void renderPreview();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [file, paperSize, orientation, zoom, margin]);
+
+  const paperAspectRatio = getPaperRatio(paperSize, orientation);
+
+  return (
+    <div className="mt-3 rounded-lg border border-gray-200 bg-gray-100 p-3 dark:border-gray-700 dark:bg-gray-950">
+      <div className="mx-auto w-full max-w-[420px] overflow-hidden rounded-md bg-white shadow-inner" style={{ aspectRatio: `${paperAspectRatio}` }}>
+        {file ? (
+          <canvas
+            ref={canvasRef}
+            className="h-full w-full"
+            style={{
+              filter: colorMode === "grayscale" ? "grayscale(1)" : "none",
+            }}
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center text-xs text-gray-500">Upload PDF untuk melihat preview</div>
+        )}
+      </div>
+      {loading && <p className="mt-2 text-xs text-gray-500">Rendering preview...</p>}
+      {previewError && <p className="mt-2 text-xs text-red-600">{previewError}</p>}
+      {file && (
+        <p className="mt-2 text-xs text-gray-500">
+          Preview menampilkan halaman 1 agar layout sesuai hasil cetak (fit-to-paper, margin, orientation).
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function PrintOrdersPage() {
   const { data: session } = useSession();
   const role = ((session?.user as any)?.role ?? "PARTICIPANT") as string;
@@ -218,7 +353,6 @@ export default function PrintOrdersPage() {
   const [previewOrientation, setPreviewOrientation] = useState<"portrait" | "landscape">("portrait");
   const [previewZoom, setPreviewZoom] = useState(100);
   const [previewMargin, setPreviewMargin] = useState(12);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -315,20 +449,6 @@ export default function PrintOrdersPage() {
       setDuplexMode("single");
     }
   }, [colorMode, duplexMode]);
-
-  useEffect(() => {
-    if (!file) {
-      setPreviewUrl(null);
-      return;
-    }
-
-    const objectUrl = URL.createObjectURL(file);
-    setPreviewUrl(objectUrl);
-
-    return () => {
-      URL.revokeObjectURL(objectUrl);
-    };
-  }, [file]);
 
   const stopPaymentPolling = () => {
     if (paymentPollRef.current) {
@@ -542,8 +662,6 @@ export default function PrintOrdersPage() {
   const totalOrders = orders.length;
   const activeOrders = orders.filter((item) => ["UPLOADED", "PAID", "PRINTING"].includes(item.status)).length;
   const pendingPayment = orders.filter((item) => item.status === "UPLOADED").length;
-  const pageAspectRatio = previewOrientation === "portrait" ? (paperSize === "A4" ? "210 / 297" : "215 / 330") : (paperSize === "A4" ? "297 / 210" : "330 / 215");
-
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
@@ -862,30 +980,15 @@ export default function PrintOrdersPage() {
 
             <div className="overflow-hidden rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-900/40">
               <p className="text-sm font-medium text-gray-700 dark:text-gray-200">Print Preview</p>
-              <p className="mt-1 text-xs text-gray-500">Preview dari file PDF, menyesuaikan orientation, zoom, dan margin.</p>
-
-              <div className="mt-3 rounded-lg border border-gray-200 bg-gray-100 p-3 dark:border-gray-700 dark:bg-gray-950">
-                <div
-                  className="mx-auto w-full max-w-[420px] overflow-hidden rounded-md bg-white shadow-inner"
-                  style={{ aspectRatio: pageAspectRatio, padding: `${previewMargin}px` }}
-                >
-                  {previewUrl ? (
-                    <iframe
-                      title="Print preview"
-                      src={`${previewUrl}#toolbar=0&navpanes=0&view=FitH`}
-                      className="h-full w-full border-0"
-                      style={{
-                        transform: `scale(${previewZoom / 100})`,
-                        transformOrigin: "top center",
-                      }}
-                    />
-                  ) : (
-                    <div className="flex h-full items-center justify-center text-xs text-gray-500">
-                      Upload PDF untuk melihat preview
-                    </div>
-                  )}
-                </div>
-              </div>
+              <p className="mt-1 text-xs text-gray-500">Preview terkontrol sesuai ukuran kertas, orientation, zoom, margin, dan mode warna.</p>
+              <PdfPreviewCanvas
+                file={file}
+                paperSize={paperSize}
+                orientation={previewOrientation}
+                zoom={previewZoom}
+                margin={previewMargin}
+                colorMode={colorMode}
+              />
             </div>
           </div>
         </div>
