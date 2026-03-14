@@ -6,7 +6,7 @@ import prisma from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
 
 export const metadata: Metadata = {
-  title: "SCALE Dashboard | Print Management",
+  title: "KOPSIS Dashboard | Print Management",
   description: "Dashboard for print order operations",
 };
 

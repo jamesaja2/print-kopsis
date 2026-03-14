@@ -3,8 +3,8 @@ import { Metadata } from "next";
 import { Suspense } from "react";
 
 export const metadata: Metadata = {
-  title: "SCALE Admin Dashboard Sign In Page",
-  description: "Sign in to access the SCALE Admin Dashboard",
+  title: "KOPSIS Admin Dashboard Sign In Page",
+  description: "Sign in to access the KOPSIS Admin Dashboard",
 };
 
 export default function SignIn() {
