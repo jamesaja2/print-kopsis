@@ -15,6 +15,7 @@ export default function GlobalSettingsPage() {
   const [paymentGatewayKey, setPaymentGatewayKey] = useState("");
   const [registrationFee, setRegistrationFee] = useState("");
   const [kioskApiToken, setKioskApiToken] = useState("");
+  const [defaultPrinter, setDefaultPrinter] = useState("");
 
   const generateKioskToken = () => {
     const randomBytes = new Uint8Array(24);
@@ -49,6 +50,7 @@ export default function GlobalSettingsPage() {
     setPaymentGatewayKey(result.data.payment_gateway_key || "");
     setRegistrationFee(result.data.registration_fee || "");
     setKioskApiToken(result.data.kiosk_api_token || "");
+    setDefaultPrinter(result.data.print_default_printer || "");
     setLoading(false);
   };
 
@@ -67,6 +69,7 @@ export default function GlobalSettingsPage() {
     formData.append("setting_payment_gateway_key", paymentGatewayKey.trim());
     formData.append("setting_registration_fee", registrationFee.trim());
     formData.append("setting_kiosk_api_token", kioskApiToken.trim());
+    formData.append("setting_print_default_printer", defaultPrinter.trim());
 
     const result = await updateContentSettings(formData);
     if (result.success) {
@@ -119,6 +122,18 @@ export default function GlobalSettingsPage() {
               onChange={(e) => setRegistrationFee(e.target.value.replace(/[^0-9]/g, ""))}
               placeholder="e.g. 50000"
             />
+          </div>
+
+          <div>
+            <Label>Default Printer (Admin Only)</Label>
+            <Input
+              value={defaultPrinter}
+              onChange={(e) => setDefaultPrinter(e.target.value)}
+              placeholder="Contoh: Printer-Lab-A"
+            />
+            <p className="mt-1 text-xs text-gray-500">
+              Printer dipilih oleh admin. Customer tidak bisa memilih printer sendiri.
+            </p>
           </div>
 
           <div className="md:col-span-2">

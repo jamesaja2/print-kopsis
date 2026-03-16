@@ -171,66 +171,81 @@ function DuplexSvg({
   const flipLabel = mode === "long_edge" ? "Balik sisi panjang" : mode === "short_edge" ? "Balik sisi pendek" : "Tanpa balik";
 
   return (
-    <svg viewBox="0 0 320 190" className="h-36 w-full rounded-xl border border-blue-light-200 bg-white md:h-48 dark:border-blue-light-800 dark:bg-gray-900">
-      <rect x="10" y="10" width="300" height="170" rx="14" fill="#F8FAFC" stroke="#E4E7EC" />
+    <div className="space-y-3">
+      <svg viewBox="0 0 320 190" className="h-36 w-full rounded-xl border border-blue-light-200 bg-white md:h-48 dark:border-blue-light-800 dark:bg-gray-900">
+        <rect x="10" y="10" width="300" height="170" rx="14" fill="#F8FAFC" stroke="#E4E7EC" />
 
-      {mode === "single" ? (
-        <>
-          <rect x="122" y={pageY + 8} width={pageWidth} height={pageHeight} rx="8" fill="#EEF4FF" stroke="#6172F3" strokeWidth="2" />
-          <rect x="112" y={pageY} width={pageWidth} height={pageHeight} rx="8" fill="#FFFFFF" stroke="#465FFF" strokeWidth="2" />
-          <circle cx="127" cy={pageY + 12} r="10" fill="#465FFF" />
-          <text x="127" y={pageY + 16} textAnchor="middle" fontSize="11" fill="#FFFFFF" fontWeight="700">1</text>
-          <text x="147" y={centerY - 6} textAnchor="middle" fontSize="11" fill="#344054" fontWeight="700">Front</text>
-          <text x="147" y={centerY + 11} textAnchor="middle" fontSize="10" fill="#475467">Page 1</text>
+        {mode === "single" ? (
+          <>
+            <rect x="122" y={pageY + 8} width={pageWidth} height={pageHeight} rx="8" fill="#EEF4FF" stroke="#6172F3" strokeWidth="2" />
+            <rect x="112" y={pageY} width={pageWidth} height={pageHeight} rx="8" fill="#FFFFFF" stroke="#465FFF" strokeWidth="2" />
+            <circle cx="127" cy={pageY + 12} r="10" fill="#465FFF" />
+            <text x="127" y={pageY + 16} textAnchor="middle" fontSize="11" fill="#FFFFFF" fontWeight="700">1</text>
+            <text x="147" y={centerY - 6} textAnchor="middle" fontSize="11" fill="#344054" fontWeight="700">Front</text>
+            <text x="147" y={centerY + 11} textAnchor="middle" fontSize="10" fill="#475467">Page 1</text>
 
-          <rect x="178" y={pageY + 54} width="82" height="30" rx="7" fill="#F2F4F7" stroke="#D0D5DD" />
-          <text x="219" y={pageY + 72} textAnchor="middle" fontSize="10" fill="#667085">Halaman belakang kosong</text>
-        </>
-      ) : (
-        <>
-          {mode === "long_edge" ? (
-            <>
-              <rect x={leftX} y={pageY} width={pageWidth} height={pageHeight} rx="8" fill="#F5F8FF" stroke="#465FFF" strokeWidth="2" />
-              <circle cx={leftX + 15} cy={pageY + 12} r="10" fill="#465FFF" />
-              <text x={leftX + 15} y={pageY + 16} textAnchor="middle" fontSize="11" fill="#FFFFFF" fontWeight="700">1</text>
-              <text x={leftX + pageWidth / 2} y={centerY - 6} textAnchor="middle" fontSize="11" fill="#344054" fontWeight="700">Front</text>
-              <text x={leftX + pageWidth / 2} y={centerY + 11} textAnchor="middle" fontSize="10" fill="#475467">Page 1</text>
+            <rect x="178" y={pageY + 54} width="82" height="30" rx="7" fill="#F2F4F7" stroke="#D0D5DD" />
+            <text x="219" y={pageY + 72} textAnchor="middle" fontSize="10" fill="#667085">Halaman belakang kosong</text>
+          </>
+        ) : (
+          <>
+            {mode === "long_edge" ? (
+              <>
+                <rect x={leftX} y={pageY} width={pageWidth} height={pageHeight} rx="8" fill="#F5F8FF" stroke="#465FFF" strokeWidth="2" />
+                <circle cx={leftX + 15} cy={pageY + 12} r="10" fill="#465FFF" />
+                <text x={leftX + 15} y={pageY + 16} textAnchor="middle" fontSize="11" fill="#FFFFFF" fontWeight="700">1</text>
+                <text x={leftX + pageWidth / 2} y={centerY - 6} textAnchor="middle" fontSize="11" fill="#344054" fontWeight="700">Front</text>
+                <text x={leftX + pageWidth / 2} y={centerY + 11} textAnchor="middle" fontSize="10" fill="#475467">Page 1</text>
 
-              <rect x={rightX} y={pageY} width={pageWidth} height={pageHeight} rx="8" fill="#ECFDF3" stroke="#12B76A" strokeWidth="2" />
-              <circle cx={rightX + 15} cy={pageY + 12} r="10" fill="#12B76A" />
-              <text x={rightX + 15} y={pageY + 16} textAnchor="middle" fontSize="11" fill="#FFFFFF" fontWeight="700">2</text>
-              <text x={rightX + pageWidth / 2} y={centerY - 6} textAnchor="middle" fontSize="11" fill="#027A48" fontWeight="700">Back</text>
-              <text x={rightX + pageWidth / 2} y={centerY + 11} textAnchor="middle" fontSize="10" fill="#039855">Page 2</text>
+                <rect x={rightX} y={pageY} width={pageWidth} height={pageHeight} rx="8" fill="#ECFDF3" stroke="#12B76A" strokeWidth="2" />
+                <circle cx={rightX + 15} cy={pageY + 12} r="10" fill="#12B76A" />
+                <text x={rightX + 15} y={pageY + 16} textAnchor="middle" fontSize="11" fill="#FFFFFF" fontWeight="700">2</text>
+                <text x={rightX + pageWidth / 2} y={centerY - 6} textAnchor="middle" fontSize="11" fill="#027A48" fontWeight="700">Back</text>
+                <text x={rightX + pageWidth / 2} y={centerY + 11} textAnchor="middle" fontSize="10" fill="#039855">Page 2</text>
 
-              <rect x="134" y="28" width="52" height="18" rx="6" fill="#E0F2FE" stroke="#7DD3FC" />
-              <text x="160" y="40" textAnchor="middle" fontSize="9" fill="#0369A1">Long edge</text>
-            </>
-          ) : (
-            <>
-              <rect x="124" y="20" width="72" height="56" rx="8" fill="#F5F8FF" stroke="#465FFF" strokeWidth="2" />
-              <circle cx="139" cy="32" r="10" fill="#465FFF" />
-              <text x="139" y="36" textAnchor="middle" fontSize="11" fill="#FFFFFF" fontWeight="700">1</text>
-              <text x="160" y="50" textAnchor="middle" fontSize="11" fill="#344054" fontWeight="700">Front</text>
-              <text x="160" y="64" textAnchor="middle" fontSize="10" fill="#475467">Page 1</text>
+                <rect x="134" y="28" width="52" height="18" rx="6" fill="#E0F2FE" stroke="#7DD3FC" />
+                <text x="160" y="40" textAnchor="middle" fontSize="9" fill="#0369A1">Long edge</text>
+              </>
+            ) : (
+              <>
+                <rect x="124" y="20" width="72" height="56" rx="8" fill="#F5F8FF" stroke="#465FFF" strokeWidth="2" />
+                <circle cx="139" cy="32" r="10" fill="#465FFF" />
+                <text x="139" y="36" textAnchor="middle" fontSize="11" fill="#FFFFFF" fontWeight="700">1</text>
+                <text x="160" y="50" textAnchor="middle" fontSize="11" fill="#344054" fontWeight="700">Front</text>
+                <text x="160" y="64" textAnchor="middle" fontSize="10" fill="#475467">Page 1</text>
 
-              <rect x="124" y="82" width="72" height="56" rx="8" fill="#ECFDF3" stroke="#12B76A" strokeWidth="2" />
-              <circle cx="139" cy="94" r="10" fill="#12B76A" />
-              <text x="139" y="98" textAnchor="middle" fontSize="11" fill="#FFFFFF" fontWeight="700">2</text>
-              <text x="160" y="112" textAnchor="middle" fontSize="11" fill="#027A48" fontWeight="700">Back</text>
-              <text x="160" y="126" textAnchor="middle" fontSize="10" fill="#039855">Page 2</text>
+                <rect x="124" y="82" width="72" height="56" rx="8" fill="#ECFDF3" stroke="#12B76A" strokeWidth="2" />
+                <circle cx="139" cy="94" r="10" fill="#12B76A" />
+                <text x="139" y="98" textAnchor="middle" fontSize="11" fill="#FFFFFF" fontWeight="700">2</text>
+                <text x="160" y="112" textAnchor="middle" fontSize="11" fill="#027A48" fontWeight="700">Back</text>
+                <text x="160" y="126" textAnchor="middle" fontSize="10" fill="#039855">Page 2</text>
 
-              <rect x="206" y="84" width="70" height="18" rx="6" fill="#FEE4E2" stroke="#FDA29B" />
-              <text x="241" y="96" textAnchor="middle" fontSize="9" fill="#B42318">Short edge</text>
-            </>
-          )}
-        </>
+                <rect x="206" y="84" width="70" height="18" rx="6" fill="#FEE4E2" stroke="#FDA29B" />
+                <text x="241" y="96" textAnchor="middle" fontSize="9" fill="#B42318">Short edge</text>
+              </>
+            )}
+          </>
+        )}
+
+        <rect x="26" y="146" width="268" height="24" rx="8" fill="#FFFFFF" stroke="#D0D5DD" />
+        <text x="160" y="162" textAnchor="middle" fontSize="10" fill="#475467" fontWeight="600">
+          {orientation === "portrait" ? "Portrait" : "Landscape"} · {modeLabel} · {flipLabel}
+        </text>
+      </svg>
+
+      {mode !== "single" && (
+        <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 dark:border-gray-700 dark:bg-gray-900">
+          <p className="text-[11px] text-gray-500">Simulasi flipbook duplex</p>
+          <div className="mt-2 flex items-center justify-center">
+            <div className="flipbook-scene">
+              <div className="flipbook-page flipbook-page-front">1</div>
+              <div className="flipbook-page flipbook-page-back">2</div>
+              <div className={`flipbook-flip-sheet ${mode === "long_edge" ? "flipbook-long-edge" : "flipbook-short-edge"}`} />
+            </div>
+          </div>
+        </div>
       )}
-
-      <rect x="26" y="146" width="268" height="24" rx="8" fill="#FFFFFF" stroke="#D0D5DD" />
-      <text x="160" y="162" textAnchor="middle" fontSize="10" fill="#475467" fontWeight="600">
-        {orientation === "portrait" ? "Portrait" : "Landscape"} · {modeLabel} · {flipLabel}
-      </text>
-    </svg>
+    </div>
   );
 }
 
@@ -846,6 +861,7 @@ export default function PrintOrdersPage() {
 
       <form onSubmit={submitOrder} className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03] space-y-5">
         <h2 className="text-lg font-semibold text-gray-800 dark:text-white/90">Create Order</h2>
+        <p className="text-xs text-gray-500">Printer ditentukan oleh admin dari Global Settings. Customer hanya mengatur opsi cetak dokumen.</p>
 
         <div className="space-y-2">
           <p className="text-sm font-medium text-gray-700 dark:text-gray-200">Upload File PDF</p>

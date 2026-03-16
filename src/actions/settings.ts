@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import path from "path";
 import { uploadToFileServerLegacy as uploadToFileServer, getPublicFileUrl, deleteFromFileServerLegacy as deleteFromFileServer, extractFileKey } from "@/lib/fileServer";
+import { requireAdmin } from "@/lib/routeAuth";
 
 type SliderRecord = {
     key: string;
@@ -29,6 +30,11 @@ function normalizeSliderRecord(raw: any): SliderRecord | null {
 
 export async function getGlobalSettings() {
     try {
+        const auth = await requireAdmin();
+        if (!auth) {
+            return { success: false, error: "Unauthorized" };
+        }
+
         const settings = await prisma.globalSettings.findMany();
         // Convert array to object for easier access { key: value }
         const settingsMap: Record<string, string> = {};
@@ -68,6 +74,11 @@ export async function getGlobalSettings() {
 
 export async function updateContentSettings(formData: FormData) {
     try {
+        const auth = await requireAdmin();
+        if (!auth) {
+            return { success: false, error: "Unauthorized" };
+        }
+
         // Handle files and plain text
         // We will loop through keys. If value is File, we "upload" it.
         
@@ -187,6 +198,11 @@ export async function updateContentSettings(formData: FormData) {
 
 export async function deleteSliderImage(imagePath: string) {
     try {
+        const auth = await requireAdmin();
+        if (!auth) {
+            return { success: false };
+        }
+
         const normalizedKey = extractFileKey(imagePath);
         if (!normalizedKey) return { success: false };
         const currentSetting = await prisma.globalSettings.findUnique({ where: { key: "slider_images" } });
