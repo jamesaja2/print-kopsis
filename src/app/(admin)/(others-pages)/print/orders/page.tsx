@@ -1247,13 +1247,43 @@ export function PrintOrdersWorkspace({ view = "all" }: { view?: WorkspaceView } 
           <p className="text-sm text-gray-500">No print orders yet.</p>
         ) : (
           <>
-            {showTableScrollHint && (
-              <div className="mb-2 flex items-center gap-2 text-xs text-gray-500 md:hidden">
-                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-gray-300">↔</span>
-                Geser tabel ke kanan untuk melihat semua kolom
-              </div>
-            )}
-            <div className="relative">
+            <div className="space-y-3 md:hidden">
+              {orders.map((order) => (
+                <div key={order.id} className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900/30">
+                  <div className="flex items-start justify-between gap-3">
+                    <button
+                      type="button"
+                      onClick={() => void openFilePreview(order.id, order.originalFilename)}
+                      className="line-clamp-2 text-left text-sm font-medium text-brand-600 hover:underline dark:text-brand-300"
+                      title="Klik untuk preview file"
+                    >
+                      {order.originalFilename}
+                    </button>
+                    <Badge color={statusBadgeColor(order.status)}>{order.statusLabel || order.status}</Badge>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                    <p className="text-gray-500">Pages: <span className="text-gray-800 dark:text-gray-200">{order.pages}</span></p>
+                    <p className="text-gray-500">Copies: <span className="text-gray-800 dark:text-gray-200">{order.copies}</span></p>
+                    <p className="text-gray-500">Price: <span className="text-gray-800 dark:text-gray-200">{order.totalPrice}</span></p>
+                    <p className="text-gray-500">Code: <span className="text-gray-800 dark:text-gray-200">{order.orderCode || "-"}</span></p>
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-end gap-2">
+                    <Button size="sm" variant="outline" onClick={() => void openOrderDetail(order.id)}>
+                      Detail
+                    </Button>
+                    {!isAdmin && order.status === "UPLOADED" ? (
+                      <Button size="sm" onClick={() => void payOrder(order.id)}>
+                        Pay
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="relative hidden md:block">
               {showLeftFade && (
                 <div className="pointer-events-none absolute bottom-0 left-0 top-0 z-10 w-6 bg-gradient-to-r from-white to-transparent dark:from-gray-900" />
               )}
