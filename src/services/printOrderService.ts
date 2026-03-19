@@ -1,5 +1,5 @@
 import prisma from "@/lib/prisma";
-import { uploadToFileServer } from "@/lib/fileServer";
+import { deleteFromFileServer, parseFileReference, uploadToFileServer } from "@/lib/fileServer";
 import { checkYoGatewayPaymentStatus, createYoGatewayPayment } from "@/lib/yogateway";
 import { logOrderStatus } from "@/lib/orderStatusHistory";
 import { pdfService } from "@/services/pdfService";
@@ -326,6 +326,57 @@ export class PrintOrderService {
         return txResult[1];
     }
 
+    async markOrderPaidByAdmin(orderId: string) {
+        const order = await prisma.order.findUnique({
+            where: { id: orderId },
+            include: { payment: true },
+        });
+
+        if (!order) {
+            throw new Error("Order not found");
+        }
+
+        if (order.status === "PAID" || order.status === "PRINTING" || order.status === "COMPLETED") {
+            return order;
+        }
+
+        const code = await this.generateOrderCode();
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        const manualPayload = this.toJsonValue({ source: "ADMIN_MANUAL", note: "Manual set to PAID" });
+
+        const txResult = await prisma.$transaction([
+            order.payment
+                ? prisma.payment.update({
+                      where: { id: order.payment.id },
+                      data: {
+                          status: "PAID",
+                          payload: manualPayload,
+                          paidAt: new Date(),
+                      },
+                  })
+                : prisma.payment.create({
+                      data: {
+                          orderId: order.id,
+                          paymentGateway: "Manual",
+                          amount: order.totalPrice,
+                          status: "PAID",
+                          payload: manualPayload,
+                          paidAt: new Date(),
+                      },
+                  }),
+            prisma.order.update({
+                where: { id: order.id },
+                data: {
+                    orderCode: code,
+                    status: "PAID",
+                    expiresAt,
+                },
+            }),
+        ]);
+
+        return txResult[1];
+    }
+
     async applyKioskTransition(orderCode: string, action: "start" | "complete" | "fail") {
         const order = await prisma.order.findUnique({ where: { orderCode } });
         if (!order) {
@@ -366,6 +417,7 @@ export class PrintOrderService {
                 data: { status: "COMPLETED" },
             });
             await logOrderStatus(order.id, "COMPLETED", { type: "KIOSK", name: "Kiosk" }, "Printing completed");
+            await this.triggerStorageDeleteOnCompleted(updated, "Kiosk Complete");
             return updated;
         }
 
@@ -379,6 +431,42 @@ export class PrintOrderService {
         });
         await logOrderStatus(order.id, "FAILED", { type: "KIOSK", name: "Kiosk" }, "Printing failed");
         return updated;
+    }
+
+    async triggerStorageDeleteOnCompleted(
+        order: { id: string; filePath?: string | null; originalFilename?: string | null },
+        source: "Kiosk Complete" | "Admin Manual Complete"
+    ) {
+        const ref = parseFileReference(order.filePath || "");
+        if (!ref) {
+            await logOrderStatus(
+                order.id,
+                "COMPLETED",
+                { type: "SYSTEM", name: "Storage Cleanup" },
+                `${source}: file reference tidak valid, delete dilewati`
+            );
+            return;
+        }
+
+        try {
+            const deleted = await deleteFromFileServer(ref.bucket, ref.key);
+            await logOrderStatus(
+                order.id,
+                "COMPLETED",
+                { type: "SYSTEM", name: "Storage Cleanup" },
+                deleted
+                    ? `${source}: file source berhasil dihapus dari storage`
+                    : `${source}: API delete terpanggil tapi server storage mengembalikan gagal`
+            );
+        } catch (error) {
+            console.error("Failed to trigger storage delete on completed order", order.id, error);
+            await logOrderStatus(
+                order.id,
+                "COMPLETED",
+                { type: "SYSTEM", name: "Storage Cleanup" },
+                `${source}: gagal hapus file source dari storage`
+            );
+        }
     }
 
     async expirePaidOrders() {

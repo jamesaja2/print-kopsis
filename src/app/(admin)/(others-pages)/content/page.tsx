@@ -5,6 +5,19 @@ import Input from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
 import { getGlobalSettings, updateContentSettings } from "@/actions/settings";
 
+type SliderItem = {
+  key: string;
+  url?: string;
+  link?: string;
+};
+
+type PendingSliderItem = {
+  id: string;
+  file: File;
+  link: string;
+  previewUrl: string;
+};
+
 export default function GlobalSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -16,6 +29,8 @@ export default function GlobalSettingsPage() {
   const [registrationFee, setRegistrationFee] = useState("");
   const [kioskApiToken, setKioskApiToken] = useState("");
   const [defaultPrinter, setDefaultPrinter] = useState("");
+  const [sliderItems, setSliderItems] = useState<SliderItem[]>([]);
+  const [pendingSliderItems, setPendingSliderItems] = useState<PendingSliderItem[]>([]);
 
   const generateKioskToken = () => {
     const randomBytes = new Uint8Array(24);
@@ -51,12 +66,65 @@ export default function GlobalSettingsPage() {
     setRegistrationFee(result.data.registration_fee || "");
     setKioskApiToken(result.data.kiosk_api_token || "");
     setDefaultPrinter(result.data.print_default_printer || "");
+
+    const rawSlider = result.data.slider_images || "[]";
+    try {
+      const parsed = JSON.parse(rawSlider);
+      if (Array.isArray(parsed)) {
+        setSliderItems(
+          parsed
+            .map((item) => {
+              if (!item || typeof item !== "object") return null;
+              const key = String((item as any).key || "").trim();
+              if (!key) return null;
+              return {
+                key,
+                url: String((item as any).url || ""),
+                link: String((item as any).link || ""),
+              } as SliderItem;
+            })
+            .filter((item): item is SliderItem => Boolean(item))
+        );
+      } else {
+        setSliderItems([]);
+      }
+    } catch {
+      setSliderItems([]);
+    }
+
     setLoading(false);
   };
 
   useEffect(() => {
     void loadSettings();
+    return () => {
+      pendingSliderItems.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const onSelectSliderFiles = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+
+    const nextItems = files.map((file) => ({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      file,
+      link: "",
+      previewUrl: URL.createObjectURL(file),
+    }));
+
+    setPendingSliderItems((prev) => [...prev, ...nextItems]);
+    event.target.value = "";
+  };
+
+  const removePendingSliderItem = (id: string) => {
+    setPendingSliderItems((prev) => {
+      const target = prev.find((item) => item.id === id);
+      if (target) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((item) => item.id !== id);
+    });
+  };
 
   const handleSave = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -70,10 +138,18 @@ export default function GlobalSettingsPage() {
     formData.append("setting_registration_fee", registrationFee.trim());
     formData.append("setting_kiosk_api_token", kioskApiToken.trim());
     formData.append("setting_print_default_printer", defaultPrinter.trim());
+    formData.append("setting_slider_images_metadata", JSON.stringify(sliderItems.map((item) => ({ key: item.key, link: item.link || "" }))));
+
+    pendingSliderItems.forEach((item) => {
+      formData.append("setting_slider_images_new_metadata", JSON.stringify({ link: item.link || "" }));
+      formData.append("setting_slider_images_new_files", item.file);
+    });
 
     const result = await updateContentSettings(formData);
     if (result.success) {
       setMessage("Global settings updated");
+      pendingSliderItems.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+      setPendingSliderItems([]);
       await loadSettings();
     } else {
       setError(result.error || "Failed to update global settings");
@@ -158,6 +234,60 @@ export default function GlobalSettingsPage() {
             <p className="mt-2 text-xs text-gray-500">
               Token ini dipakai sebagai header Authorization Bearer untuk semua endpoint kiosk.
             </p>
+          </div>
+
+          <div className="md:col-span-2 space-y-3 rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+            <div>
+              <Label>Promo Slider (Admin CRUD)</Label>
+              <p className="mt-1 text-xs text-gray-500">Klik banner di dashboard user akan membuka CTA URL yang Anda set di sini.</p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              {sliderItems.map((item) => (
+                <div key={item.key} className="space-y-2 rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+                  {item.url ? <img src={item.url} alt="Slider" className="h-28 w-full rounded object-cover" /> : null}
+                  <Input
+                    value={item.link || ""}
+                    onChange={(e) =>
+                      setSliderItems((prev) => prev.map((x) => (x.key === item.key ? { ...x, link: e.target.value } : x)))
+                    }
+                    placeholder="CTA URL (https://...)"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setSliderItems((prev) => prev.filter((x) => x.key !== item.key))}
+                    className="rounded border border-red-300 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
+                  >
+                    Hapus
+                  </button>
+                </div>
+              ))}
+
+              {pendingSliderItems.map((item) => (
+                <div key={item.id} className="space-y-2 rounded-lg border border-dashed border-brand-300 p-3 dark:border-brand-700">
+                  <img src={item.previewUrl} alt="New slider" className="h-28 w-full rounded object-cover" />
+                  <Input
+                    value={item.link}
+                    onChange={(e) =>
+                      setPendingSliderItems((prev) => prev.map((x) => (x.id === item.id ? { ...x, link: e.target.value } : x)))
+                    }
+                    placeholder="CTA URL (optional)"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removePendingSliderItem(item.id)}
+                    className="rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+                  >
+                    Remove Upload
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">
+              <input type="file" accept="image/*" multiple className="hidden" onChange={onSelectSliderFiles} />
+              Tambah Gambar Slider
+            </label>
           </div>
         </div>
 

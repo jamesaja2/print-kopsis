@@ -13,7 +13,12 @@ export async function GET(
     const { orderId } = await context.params;
     const order = await prisma.order.findUnique({
         where: { id: orderId },
-        include: { payment: true },
+        include: {
+            payment: true,
+            statusHistories: {
+                orderBy: { createdAt: "asc" },
+            },
+        },
     });
 
     if (!order || order.userId !== auth.userId) {

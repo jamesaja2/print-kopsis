@@ -172,7 +172,7 @@ export async function uploadToFileServer(
  */
 export async function deleteFromFileServer(bucket: string, key: string) {
     ensureConfig();
-    if (!bucket || !key) return;
+    if (!bucket || !key) return false;
 
     const deleteParams = new URLSearchParams();
     appendApiKeySearchParam(deleteParams);
@@ -198,6 +198,14 @@ export async function deleteFromFileServer(bucket: string, key: string) {
         } catch (e) {
             // ignore
         }
+        return false;
+    }
+
+    try {
+        const data = await response.json();
+        return data?.status === "success";
+    } catch {
+        return true;
     }
 }
 
@@ -304,9 +312,9 @@ export async function deleteFromFileServerLegacy(urlOrRef: string) {
     const parsed = parseFileReference(urlOrRef);
     if (!parsed) {
         console.warn("Could not parse file reference for deletion:", urlOrRef);
-        return;
+        return false;
     }
-    await deleteFromFileServer(parsed.bucket, parsed.key);
+    return deleteFromFileServer(parsed.bucket, parsed.key);
 }
 
 /**

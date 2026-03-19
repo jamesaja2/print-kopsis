@@ -4,6 +4,7 @@ import { ok, fail } from "@/lib/apiResponse";
 import { requireAdmin } from "@/lib/routeAuth";
 import { logOrderStatus } from "@/lib/orderStatusHistory";
 import { isMissingTableError } from "@/lib/prismaError";
+import { printOrderService } from "@/services/printOrderService";
 
 const statusSchema = z.object({
     status: z.enum(["UPLOADED", "PAID", "PRINTING", "COMPLETED", "FAILED", "EXPIRED"]),
@@ -22,10 +23,16 @@ export async function PATCH(
         if (!parsed.success) return fail("Invalid status", 422, parsed.error.flatten());
 
         const { orderId } = await context.params;
-        const order = await prisma.order.update({
-            where: { id: orderId },
-            data: { status: parsed.data.status },
-        });
+        const previous = await prisma.order.findUnique({ where: { id: orderId } });
+        if (!previous) return fail("Order not found", 404);
+
+        const order =
+            parsed.data.status === "PAID" && previous.status !== "PAID"
+                ? await printOrderService.markOrderPaidByAdmin(orderId)
+                : await prisma.order.update({
+                      where: { id: orderId },
+                      data: { status: parsed.data.status },
+                  });
 
         await logOrderStatus(
             order.id,
@@ -33,6 +40,10 @@ export async function PATCH(
             { type: "ADMIN", id: auth.userId, name: ((auth.session.user as any)?.name as string) || "Admin" },
             "Manual status update from admin panel"
         );
+
+        if (parsed.data.status === "COMPLETED" && previous.status !== "COMPLETED") {
+            await printOrderService.triggerStorageDeleteOnCompleted(order, "Admin Manual Complete");
+        }
 
         return ok(order, "Order status updated");
     } catch (error) {

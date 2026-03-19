@@ -7,8 +7,10 @@ import { useSession } from "next-auth/react";
 import { useSidebar } from "../context/SidebarContext";
 import {
   ChevronDownIcon,
+  FileIcon,
   GridIcon,
   HorizontaLDots,
+  ListIcon,
   PageIcon,
   UserCircleIcon,
 } from "../icons/index";
@@ -30,9 +32,14 @@ const navItems: NavItem[] = [
 
 const participantItems: NavItem[] = [
   {
-    icon: <PageIcon />,
-    name: "Print Orders",
-    path: "/print/orders",
+    icon: <FileIcon />,
+    name: "Create Order",
+    path: "/print/create",
+  },
+  {
+    icon: <ListIcon />,
+    name: "My Orders",
+    path: "/print/my-orders",
   },
   {
     icon: <UserCircleIcon />,

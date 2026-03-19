@@ -74,6 +74,14 @@ type ApiResponse<T> = {
   message: string;
 };
 
+type PromoSlide = {
+  key: string;
+  link?: string;
+  url: string;
+};
+
+type WorkspaceView = "all" | "create" | "orders";
+
 const statusOptions: PrintOrder["status"][] = [
   "UPLOADED",
   "PAID",
@@ -384,7 +392,7 @@ function PdfPreviewCanvas({
   );
 }
 
-export default function PrintOrdersPage() {
+export function PrintOrdersWorkspace({ view = "all" }: { view?: WorkspaceView } = {}) {
   const { data: session } = useSession();
   const role = ((session?.user as any)?.role ?? "PARTICIPANT") as string;
   const isAdmin = role === "ADMIN";
@@ -409,6 +417,12 @@ export default function PrintOrdersPage() {
   const [detailOrder, setDetailOrder] = useState<PrintOrder | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState(false);
 
+  const [filePreviewOpen, setFilePreviewOpen] = useState(false);
+  const [filePreviewLoading, setFilePreviewLoading] = useState(false);
+  const [filePreviewDeleted, setFilePreviewDeleted] = useState(false);
+  const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
+  const [filePreviewName, setFilePreviewName] = useState<string>("");
+
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [paymentOrderId, setPaymentOrderId] = useState<string | null>(null);
   const [paymentQrUrl, setPaymentQrUrl] = useState<string | null>(null);
@@ -424,6 +438,13 @@ export default function PrintOrdersPage() {
   const [filterUserId, setFilterUserId] = useState<string>("ALL");
   const [filterFrom, setFilterFrom] = useState<string>("");
   const [filterTo, setFilterTo] = useState<string>("");
+  const [promoSlides, setPromoSlides] = useState<PromoSlide[]>([]);
+  const [promoIndex, setPromoIndex] = useState(0);
+
+  const showCreateSection = isAdmin || view !== "orders";
+  const showOrdersSection = isAdmin || view !== "create";
+  const showUserSplitHero = !isAdmin && view === "all";
+  const isCreateOnlyUserView = !isAdmin && view === "create";
 
   const canSubmit = useMemo(() => !!file && copies >= 1 && !uploading, [file, copies, uploading]);
 
@@ -493,6 +514,29 @@ export default function PrintOrdersPage() {
     void loadAdminUsers();
     void loadSalesSummary();
   }, [isAdmin]);
+
+  useEffect(() => {
+    const loadPromoSlides = async () => {
+      try {
+        const res = await fetch("/api/print/promo-slider", { cache: "no-store" });
+        const json = (await res.json()) as ApiResponse<PromoSlide[]>;
+        if (!res.ok || !json.success) return;
+        setPromoSlides((json.data || []).filter((item) => item.url));
+      } catch {
+        // Keep order flow usable if promo slider fails to load.
+      }
+    };
+
+    void loadPromoSlides();
+  }, []);
+
+  useEffect(() => {
+    if (promoSlides.length <= 1) return;
+    const timer = window.setInterval(() => {
+      setPromoIndex((prev) => (prev + 1) % promoSlides.length);
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [promoSlides]);
 
   useEffect(() => {
     if (colorMode === "color" && duplexMode !== "single") {
@@ -662,6 +706,32 @@ export default function PrintOrdersPage() {
     }
   };
 
+  const openFilePreview = async (orderId: string, filename: string) => {
+    setFilePreviewOpen(true);
+    setFilePreviewLoading(true);
+    setFilePreviewDeleted(false);
+    setFilePreviewUrl(null);
+    setFilePreviewName(filename);
+
+    try {
+      const res = await fetch(`/api/print/orders/${orderId}/file-status`, { cache: "no-store" });
+      const json = (await res.json()) as ApiResponse<{ exists: boolean; deleted: boolean; url?: string }>;
+      if (!res.ok || !json.success) {
+        throw new Error(json.message || "Failed to fetch file status");
+      }
+
+      const deleted = Boolean(json.data?.deleted || !json.data?.exists);
+      setFilePreviewDeleted(deleted);
+      setFilePreviewUrl(deleted ? null : `/api/print/orders/${orderId}/file-preview`);
+    } catch (e) {
+      setFilePreviewDeleted(true);
+      setFilePreviewUrl(null);
+      setError(e instanceof Error ? e.message : "Failed to open file preview");
+    } finally {
+      setFilePreviewLoading(false);
+    }
+  };
+
   const openOrderDetail = async (orderId: string) => {
     setDetailOpen(true);
     setDetailLoading(true);
@@ -712,17 +782,89 @@ export default function PrintOrdersPage() {
   const totalOrders = orders.length;
   const activeOrders = orders.filter((item) => ["UPLOADED", "PAID", "PRINTING"].includes(item.status)).length;
   const pendingPayment = orders.filter((item) => item.status === "UPLOADED").length;
+
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
-        <h1 className="text-xl font-semibold text-gray-800 dark:text-white/90">Print Orders</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          {isAdmin
-            ? "Pantau order, cek detail transaksi, dan update status print dari halaman ini."
-            : "Upload PDF, atur opsi cetak, lalu bayar untuk mendapatkan order code."}
-        </p>
-      </div>
+      {!isCreateOnlyUserView && (showUserSplitHero ? (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.03]">
+            <div className="relative">
+              {promoSlides.length > 0 ? (
+                <button
+                  type="button"
+                  className="group block w-full overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700"
+                  onClick={() => {
+                    const current = promoSlides[promoIndex];
+                    if (current?.link) {
+                      window.open(current.link, "_blank", "noopener,noreferrer");
+                    }
+                  }}
+                  title={promoSlides[promoIndex]?.link ? "Open promo link" : "Promo"}
+                >
+                  <img
+                    src={promoSlides[promoIndex]?.url}
+                    alt="Promo slider"
+                    className="aspect-video w-full object-cover transition duration-300 group-hover:scale-[1.02]"
+                  />
+                </button>
+              ) : (
+                <div className="flex aspect-video items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-500 dark:border-gray-700 dark:bg-gray-900">
+                  Belum ada banner promo
+                </div>
+              )}
 
+              {promoSlides.length > 1 ? (
+                <>
+                  <button
+                    type="button"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full border border-white/70 bg-white/85 p-2 text-gray-700 shadow hover:bg-white"
+                    onClick={() => setPromoIndex((prev) => (prev - 1 + promoSlides.length) % promoSlides.length)}
+                    aria-label="Previous slide"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M15 6L9 12L15 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full border border-white/70 bg-white/85 p-2 text-gray-700 shadow hover:bg-white"
+                    onClick={() => setPromoIndex((prev) => (prev + 1) % promoSlides.length)}
+                    aria-label="Next slide"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M9 6L15 12L9 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                </>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
+            <h1 className="text-xl font-semibold text-gray-800 dark:text-white/90">Print Orders</h1>
+            <p className="mt-1 text-sm text-gray-500">Upload PDF, atur opsi cetak, lalu bayar untuk mendapatkan order code.</p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <a href="/print/create" className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600">
+                Mulai Order Baru
+              </a>
+              <a href="/print/my-orders" className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">
+                Lihat Pesanan Saya
+              </a>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
+          <h1 className="text-xl font-semibold text-gray-800 dark:text-white/90">Print Orders</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            {isAdmin
+              ? "Pantau order, cek detail transaksi, dan update status print dari halaman ini."
+              : "Upload PDF, atur opsi cetak, lalu bayar untuk mendapatkan order code."}
+          </p>
+        </div>
+      ))}
+
+      {!isCreateOnlyUserView && (
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03]">
           <p className="text-sm text-gray-500">Total Orders</p>
@@ -737,6 +879,7 @@ export default function PrintOrdersPage() {
           <p className="mt-2 text-2xl font-semibold text-gray-800 dark:text-white/90">{pendingPayment}</p>
         </div>
       </div>
+      )}
 
       {isAdmin && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -859,6 +1002,7 @@ export default function PrintOrdersPage() {
         </div>
       )}
 
+      {showCreateSection && (
       <form onSubmit={submitOrder} className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03] space-y-5">
         <h2 className="text-lg font-semibold text-gray-800 dark:text-white/90">Create Order</h2>
         <p className="text-xs text-gray-500">Printer ditentukan oleh admin dari Global Settings. Customer hanya mengatur opsi cetak dokumen.</p>
@@ -1048,11 +1192,13 @@ export default function PrintOrdersPage() {
           {uploading ? "Creating..." : "Create Print Order"}
         </Button>
       </form>
+      )}
 
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
       )}
 
+      {showOrdersSection && (
       <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-800 dark:text-white/90">{isAdmin ? "All Orders" : "My Orders"}</h2>
@@ -1090,7 +1236,16 @@ export default function PrintOrdersPage() {
               <TableBody>
                 {orders.map((order) => (
                   <TableRow key={order.id} className="border-b border-gray-100 dark:border-gray-800/80">
-                    <TableCell className="py-3 pr-4 text-gray-700 dark:text-gray-200">{order.originalFilename}</TableCell>
+                    <TableCell className="py-3 pr-4 text-gray-700 dark:text-gray-200">
+                      <button
+                        type="button"
+                        onClick={() => void openFilePreview(order.id, order.originalFilename)}
+                        className="text-left text-brand-600 hover:underline dark:text-brand-300"
+                        title="Klik untuk preview file"
+                      >
+                        {order.originalFilename}
+                      </button>
+                    </TableCell>
                     {isAdmin && <TableCell className="py-3 pr-4 text-gray-700 dark:text-gray-200">{order.user?.name || order.user?.email || "-"}</TableCell>}
                     <TableCell className="py-3 pr-4 text-gray-700 dark:text-gray-200">{order.pages}</TableCell>
                     <TableCell className="py-3 pr-4 text-gray-700 dark:text-gray-200">{order.copies}</TableCell>
@@ -1129,6 +1284,7 @@ export default function PrintOrdersPage() {
           </div>
         )}
       </div>
+      )}
 
       <Modal isOpen={detailOpen} onClose={() => setDetailOpen(false)} className="max-w-2xl p-6">
         {detailLoading ? (
@@ -1251,6 +1407,33 @@ export default function PrintOrdersPage() {
         )}
       </Modal>
 
+      <Modal isOpen={filePreviewOpen} onClose={() => setFilePreviewOpen(false)} className="max-w-3xl p-6">
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">Preview File</h3>
+            <p className="text-sm text-gray-500">{filePreviewName || "Dokumen"}</p>
+          </div>
+
+          {filePreviewLoading ? (
+            <p className="text-sm text-gray-500">Mengecek status file...</p>
+          ) : filePreviewDeleted ? (
+            <div className="rounded-lg border border-warning-200 bg-warning-50 px-4 py-3 text-sm text-warning-700">
+              File sudah dihapus dari storage.
+            </div>
+          ) : filePreviewUrl ? (
+            <div className="h-[70vh] overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+              <iframe
+                title="Order file preview"
+                src={`${filePreviewUrl}#toolbar=1&navpanes=0`}
+                className="h-full w-full border-0"
+              />
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500">Preview tidak tersedia.</p>
+          )}
+        </div>
+      </Modal>
+
       <Modal isOpen={paymentModalOpen} onClose={closePaymentModal} className="max-w-md p-6">
         <div className="space-y-4">
           <div>
@@ -1278,4 +1461,8 @@ export default function PrintOrdersPage() {
       </Modal>
     </div>
   );
+}
+
+export default function PrintOrdersPage() {
+  return <PrintOrdersWorkspace />;
 }
