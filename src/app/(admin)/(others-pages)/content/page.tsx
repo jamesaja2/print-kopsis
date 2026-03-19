@@ -18,6 +18,39 @@ type PendingSliderItem = {
   previewUrl: string;
 };
 
+type KioskClient = {
+  id: string;
+  name: string;
+  token: string;
+  isActive: boolean;
+};
+
+const createKioskClientId = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+const createKioskToken = () => {
+  const randomBytes = new Uint8Array(24);
+  if (typeof window !== "undefined" && window.crypto?.getRandomValues) {
+    window.crypto.getRandomValues(randomBytes);
+  } else {
+    for (let i = 0; i < randomBytes.length; i += 1) {
+      randomBytes[i] = Math.floor(Math.random() * 256);
+    }
+  }
+
+  const token = Array.from(randomBytes)
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+
+  return `kiosk_${token}`;
+};
+
+const createDefaultKioskClient = (name?: string, token?: string): KioskClient => ({
+  id: createKioskClientId(),
+  name: name?.trim() || "Kiosk",
+  token: token?.trim() || createKioskToken(),
+  isActive: true,
+});
+
 export default function GlobalSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -27,26 +60,25 @@ export default function GlobalSettingsPage() {
   const [paymentGatewayId, setPaymentGatewayId] = useState("");
   const [paymentGatewayKey, setPaymentGatewayKey] = useState("");
   const [registrationFee, setRegistrationFee] = useState("");
-  const [kioskApiToken, setKioskApiToken] = useState("");
+  const [kioskClients, setKioskClients] = useState<KioskClient[]>([]);
   const [defaultPrinter, setDefaultPrinter] = useState("");
   const [sliderItems, setSliderItems] = useState<SliderItem[]>([]);
   const [pendingSliderItems, setPendingSliderItems] = useState<PendingSliderItem[]>([]);
 
-  const generateKioskToken = () => {
-    const randomBytes = new Uint8Array(24);
-    if (typeof window !== "undefined" && window.crypto?.getRandomValues) {
-      window.crypto.getRandomValues(randomBytes);
-    } else {
-      for (let i = 0; i < randomBytes.length; i += 1) {
-        randomBytes[i] = Math.floor(Math.random() * 256);
-      }
-    }
+  const addKioskClient = () => {
+    setKioskClients((prev) => [...prev, createDefaultKioskClient(`Kiosk ${prev.length + 1}`)]);
+  };
 
-    const token = Array.from(randomBytes)
-      .map((byte) => byte.toString(16).padStart(2, "0"))
-      .join("");
+  const updateKioskClient = (id: string, patch: Partial<KioskClient>) => {
+    setKioskClients((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  };
 
-    setKioskApiToken(`kiosk_${token}`);
+  const removeKioskClient = (id: string) => {
+    setKioskClients((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  const regenerateKioskClientToken = (id: string) => {
+    updateKioskClient(id, { token: createKioskToken() });
   };
 
   const loadSettings = async () => {
@@ -64,8 +96,41 @@ export default function GlobalSettingsPage() {
     setPaymentGatewayId(result.data.payment_gateway_id || "");
     setPaymentGatewayKey(result.data.payment_gateway_key || "");
     setRegistrationFee(result.data.registration_fee || "");
-    setKioskApiToken(result.data.kiosk_api_token || "");
     setDefaultPrinter(result.data.print_default_printer || "");
+
+    const rawKioskClients = result.data.kiosk_api_clients || "";
+    const legacyKioskToken = (result.data.kiosk_api_token || "").trim();
+
+    let parsedKioskClients: KioskClient[] = [];
+    if (rawKioskClients) {
+      try {
+        const parsed = JSON.parse(rawKioskClients);
+        if (Array.isArray(parsed)) {
+          parsedKioskClients = parsed
+            .map((item, index) => {
+              if (!item || typeof item !== "object") return null;
+              const name = String((item as any).name || "").trim() || `Kiosk ${index + 1}`;
+              const token = String((item as any).token || "").trim();
+              if (!token) return null;
+              return {
+                id: createKioskClientId(),
+                name,
+                token,
+                isActive: Boolean((item as any).isActive ?? true),
+              } as KioskClient;
+            })
+            .filter((item): item is KioskClient => Boolean(item));
+        }
+      } catch {
+        parsedKioskClients = [];
+      }
+    }
+
+    if (parsedKioskClients.length === 0 && legacyKioskToken) {
+      parsedKioskClients = [createDefaultKioskClient("Kiosk Legacy", legacyKioskToken)];
+    }
+
+    setKioskClients(parsedKioskClients);
 
     const rawSlider = result.data.slider_images || "[]";
     try {
@@ -136,7 +201,15 @@ export default function GlobalSettingsPage() {
     formData.append("setting_payment_gateway_id", paymentGatewayId.trim());
     formData.append("setting_payment_gateway_key", paymentGatewayKey.trim());
     formData.append("setting_registration_fee", registrationFee.trim());
-    formData.append("setting_kiosk_api_token", kioskApiToken.trim());
+    const normalizedKioskClients = kioskClients
+      .map((item) => ({
+        name: item.name.trim() || "Kiosk",
+        token: item.token.trim(),
+        isActive: item.isActive,
+      }))
+      .filter((item) => item.token);
+    formData.append("setting_kiosk_api_clients", JSON.stringify(normalizedKioskClients));
+    formData.append("setting_kiosk_api_token", normalizedKioskClients.find((item) => item.isActive)?.token || "");
     formData.append("setting_print_default_printer", defaultPrinter.trim());
     formData.append("setting_slider_images_metadata", JSON.stringify(sliderItems.map((item) => ({ key: item.key, link: item.link || "" }))));
 
@@ -212,28 +285,83 @@ export default function GlobalSettingsPage() {
             </p>
           </div>
 
-          <div className="md:col-span-2">
-            <Label>Kiosk API Token</Label>
-            <div className="flex flex-col gap-3 md:flex-row">
-              <div className="flex-1">
-                <Input
-                  value={kioskApiToken}
-                  onChange={(e) => setKioskApiToken(e.target.value)}
-                  placeholder="Bearer token untuk endpoint kiosk"
-                />
+          <div className="md:col-span-2 space-y-3 rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <Label>Kiosk API Clients</Label>
+                <p className="mt-1 text-xs text-gray-500">
+                  Anda bisa membuat banyak token kiosk. Setiap token bisa diberi nama dan diaktifkan/nonaktifkan.
+                </p>
               </div>
               <button
                 type="button"
-                onClick={generateKioskToken}
+                onClick={addKioskClient}
                 disabled={saving || loading}
-                className="rounded border border-brand-300 px-4 py-2.5 text-sm font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-50 dark:border-brand-800 dark:text-brand-300 dark:hover:bg-brand-900/30"
+                className="rounded border border-brand-300 px-3 py-2 text-sm font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-50 dark:border-brand-800 dark:text-brand-300 dark:hover:bg-brand-900/30"
               >
-                Generate Token
+                Tambah Kiosk Token
               </button>
             </div>
-            <p className="mt-2 text-xs text-gray-500">
-              Token ini dipakai sebagai header Authorization Bearer untuk semua endpoint kiosk.
-            </p>
+
+            {kioskClients.length === 0 ? (
+              <p className="text-xs text-gray-500">Belum ada token kiosk. Tambahkan minimal 1 token untuk mengaktifkan API kiosk.</p>
+            ) : (
+              <div className="space-y-3">
+                {kioskClients.map((client, index) => (
+                  <div key={client.id} className="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-12">
+                      <div className="md:col-span-3">
+                        <Label>Nama Kiosk</Label>
+                        <Input
+                          value={client.name}
+                          onChange={(e) => updateKioskClient(client.id, { name: e.target.value })}
+                          placeholder={`Kiosk ${index + 1}`}
+                        />
+                      </div>
+
+                      <div className="md:col-span-7">
+                        <Label>Bearer Token</Label>
+                        <Input
+                          value={client.token}
+                          onChange={(e) => updateKioskClient(client.id, { token: e.target.value })}
+                          placeholder="kiosk_xxx"
+                        />
+                      </div>
+
+                      <div className="md:col-span-2 flex items-end">
+                        <label className="flex h-[42px] w-full items-center justify-center gap-2 rounded border border-gray-300 text-sm text-gray-700 dark:border-gray-700 dark:text-gray-200">
+                          <input
+                            type="checkbox"
+                            checked={client.isActive}
+                            onChange={(e) => updateKioskClient(client.id, { isActive: e.target.checked })}
+                          />
+                          Active
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => regenerateKioskClientToken(client.id)}
+                        disabled={saving || loading}
+                        className="rounded border border-brand-300 px-3 py-1.5 text-xs font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-50 dark:border-brand-800 dark:text-brand-300 dark:hover:bg-brand-900/30"
+                      >
+                        Regenerate Token
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeKioskClient(client.id)}
+                        disabled={saving || loading}
+                        className="rounded border border-red-300 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                      >
+                        Hapus
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="md:col-span-2 space-y-3 rounded-xl border border-gray-200 p-4 dark:border-gray-800">

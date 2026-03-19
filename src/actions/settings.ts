@@ -42,8 +42,8 @@ export async function getGlobalSettings() {
         for (const s of settings) {
              let val = s.value;
              try {
-                // If it's a JSON array (slider images), parse and sign each
-                if (val.startsWith("[") && val.endsWith("]")) {
+                // Parse and sign slider image records only.
+                if (s.key === "slider_images" && val.startsWith("[") && val.endsWith("]")) {
                     const arr = JSON.parse(val);
                     if (Array.isArray(arr)) {
                         const signedArr: SliderResponseRecord[] = [];
