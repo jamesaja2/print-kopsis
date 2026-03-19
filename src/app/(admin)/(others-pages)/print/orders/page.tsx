@@ -440,6 +440,10 @@ export function PrintOrdersWorkspace({ view = "all" }: { view?: WorkspaceView } 
   const [filterTo, setFilterTo] = useState<string>("");
   const [promoSlides, setPromoSlides] = useState<PromoSlide[]>([]);
   const [promoIndex, setPromoIndex] = useState(0);
+  const ordersTableScrollRef = useRef<HTMLDivElement | null>(null);
+  const [showTableScrollHint, setShowTableScrollHint] = useState(false);
+  const [showLeftFade, setShowLeftFade] = useState(false);
+  const [showRightFade, setShowRightFade] = useState(false);
 
   const showCreateSection = isAdmin || view !== "orders";
   const showOrdersSection = isAdmin || view !== "create";
@@ -543,6 +547,29 @@ export function PrintOrdersWorkspace({ view = "all" }: { view?: WorkspaceView } 
       setDuplexMode("single");
     }
   }, [colorMode, duplexMode]);
+
+  useEffect(() => {
+    const updateScrollAffordance = () => {
+      const el = ordersTableScrollRef.current;
+      if (!el) return;
+      const canScroll = el.scrollWidth > el.clientWidth + 4;
+      setShowTableScrollHint(canScroll);
+      setShowLeftFade(canScroll && el.scrollLeft > 4);
+      setShowRightFade(canScroll && el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+    };
+
+    updateScrollAffordance();
+    window.addEventListener("resize", updateScrollAffordance);
+    return () => window.removeEventListener("resize", updateScrollAffordance);
+  }, [orders.length, isAdmin, showOrdersSection, detailOpen]);
+
+  const handleOrdersTableScroll = () => {
+    const el = ordersTableScrollRef.current;
+    if (!el) return;
+    const canScroll = el.scrollWidth > el.clientWidth + 4;
+    setShowLeftFade(canScroll && el.scrollLeft > 4);
+    setShowRightFade(canScroll && el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+  };
 
   const stopPaymentPolling = () => {
     if (paymentPollRef.current) {
@@ -1219,69 +1246,89 @@ export function PrintOrdersWorkspace({ view = "all" }: { view?: WorkspaceView } 
         ) : orders.length === 0 ? (
           <p className="text-sm text-gray-500">No print orders yet.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <Table className="text-sm">
-              <TableHeader>
-                <TableRow className="border-b border-gray-200 text-left dark:border-gray-800">
-                  <TableCell isHeader className="py-3 pr-4 font-medium text-gray-600 dark:text-gray-300">File</TableCell>
-                  {isAdmin && <TableCell isHeader className="py-3 pr-4 font-medium text-gray-600 dark:text-gray-300">User</TableCell>}
-                  <TableCell isHeader className="py-3 pr-4 font-medium text-gray-600 dark:text-gray-300">Pages</TableCell>
-                  <TableCell isHeader className="py-3 pr-4 font-medium text-gray-600 dark:text-gray-300">Copies</TableCell>
-                  <TableCell isHeader className="py-3 pr-4 font-medium text-gray-600 dark:text-gray-300">Price</TableCell>
-                  <TableCell isHeader className="py-3 pr-4 font-medium text-gray-600 dark:text-gray-300">Status</TableCell>
-                  <TableCell isHeader className="py-3 pr-4 font-medium text-gray-600 dark:text-gray-300">Code</TableCell>
-                  <TableCell isHeader className="py-3 text-right font-medium text-gray-600 dark:text-gray-300">Action</TableCell>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {orders.map((order) => (
-                  <TableRow key={order.id} className="border-b border-gray-100 dark:border-gray-800/80">
-                    <TableCell className="py-3 pr-4 text-gray-700 dark:text-gray-200">
-                      <button
-                        type="button"
-                        onClick={() => void openFilePreview(order.id, order.originalFilename)}
-                        className="text-left text-brand-600 hover:underline dark:text-brand-300"
-                        title="Klik untuk preview file"
-                      >
-                        {order.originalFilename}
-                      </button>
-                    </TableCell>
-                    {isAdmin && <TableCell className="py-3 pr-4 text-gray-700 dark:text-gray-200">{order.user?.name || order.user?.email || "-"}</TableCell>}
-                    <TableCell className="py-3 pr-4 text-gray-700 dark:text-gray-200">{order.pages}</TableCell>
-                    <TableCell className="py-3 pr-4 text-gray-700 dark:text-gray-200">{order.copies}</TableCell>
-                    <TableCell className="py-3 pr-4 text-gray-700 dark:text-gray-200">{order.totalPrice}</TableCell>
-                    <TableCell className="py-3 pr-4">
-                      <Badge color={statusBadgeColor(order.status)}>{order.statusLabel || order.status}</Badge>
-                    </TableCell>
-                    <TableCell className="py-3 pr-4 text-gray-700 dark:text-gray-200">
-                      {order.orderCode ? (
-                        <span
-                          className="inline-flex rounded-md border border-gray-300 bg-gray-50 px-2 py-1 text-xs font-semibold tracking-[0.18em] text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
-                          style={{ fontFamily: "Consolas, 'Liberation Mono', Menlo, Monaco, 'Courier New', monospace" }}
-                        >
-                          {order.orderCode}
-                        </span>
-                      ) : (
-                        "-"
-                      )}
-                    </TableCell>
-                    <TableCell className="py-3 text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button size="sm" variant="outline" onClick={() => void openOrderDetail(order.id)}>
-                          Detail
-                        </Button>
-                        {!isAdmin && order.status === "UPLOADED" ? (
-                          <Button size="sm" onClick={() => void payOrder(order.id)}>
-                            Pay
-                          </Button>
-                        ) : null}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+          <>
+            {showTableScrollHint && (
+              <div className="mb-2 flex items-center gap-2 text-xs text-gray-500 md:hidden">
+                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-gray-300">↔</span>
+                Geser tabel ke kanan untuk melihat semua kolom
+              </div>
+            )}
+            <div className="relative">
+              {showLeftFade && (
+                <div className="pointer-events-none absolute bottom-0 left-0 top-0 z-10 w-6 bg-gradient-to-r from-white to-transparent dark:from-gray-900" />
+              )}
+              {showRightFade && (
+                <div className="pointer-events-none absolute bottom-0 right-0 top-0 z-10 w-6 bg-gradient-to-l from-white to-transparent dark:from-gray-900" />
+              )}
+              <div
+                ref={ordersTableScrollRef}
+                className="overflow-x-auto"
+                onScroll={handleOrdersTableScroll}
+              >
+                <Table className="text-sm">
+                  <TableHeader>
+                    <TableRow className="border-b border-gray-200 text-left dark:border-gray-800">
+                      <TableCell isHeader className="py-3 pr-4 font-medium text-gray-600 dark:text-gray-300">File</TableCell>
+                      {isAdmin && <TableCell isHeader className="py-3 pr-4 font-medium text-gray-600 dark:text-gray-300">User</TableCell>}
+                      <TableCell isHeader className="py-3 pr-4 font-medium text-gray-600 dark:text-gray-300">Pages</TableCell>
+                      <TableCell isHeader className="py-3 pr-4 font-medium text-gray-600 dark:text-gray-300">Copies</TableCell>
+                      <TableCell isHeader className="py-3 pr-4 font-medium text-gray-600 dark:text-gray-300">Price</TableCell>
+                      <TableCell isHeader className="py-3 pr-4 font-medium text-gray-600 dark:text-gray-300">Status</TableCell>
+                      <TableCell isHeader className="py-3 pr-4 font-medium text-gray-600 dark:text-gray-300">Code</TableCell>
+                      <TableCell isHeader className="py-3 text-right font-medium text-gray-600 dark:text-gray-300">Action</TableCell>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {orders.map((order) => (
+                      <TableRow key={order.id} className="border-b border-gray-100 dark:border-gray-800/80">
+                        <TableCell className="py-3 pr-4 text-gray-700 dark:text-gray-200">
+                          <button
+                            type="button"
+                            onClick={() => void openFilePreview(order.id, order.originalFilename)}
+                            className="text-left text-brand-600 hover:underline dark:text-brand-300"
+                            title="Klik untuk preview file"
+                          >
+                            {order.originalFilename}
+                          </button>
+                        </TableCell>
+                        {isAdmin && <TableCell className="py-3 pr-4 text-gray-700 dark:text-gray-200">{order.user?.name || order.user?.email || "-"}</TableCell>}
+                        <TableCell className="py-3 pr-4 text-gray-700 dark:text-gray-200">{order.pages}</TableCell>
+                        <TableCell className="py-3 pr-4 text-gray-700 dark:text-gray-200">{order.copies}</TableCell>
+                        <TableCell className="py-3 pr-4 text-gray-700 dark:text-gray-200">{order.totalPrice}</TableCell>
+                        <TableCell className="py-3 pr-4">
+                          <Badge color={statusBadgeColor(order.status)}>{order.statusLabel || order.status}</Badge>
+                        </TableCell>
+                        <TableCell className="py-3 pr-4 text-gray-700 dark:text-gray-200">
+                          {order.orderCode ? (
+                            <span
+                              className="inline-flex rounded-md border border-gray-300 bg-gray-50 px-2 py-1 text-xs font-semibold tracking-[0.18em] text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+                              style={{ fontFamily: "Consolas, 'Liberation Mono', Menlo, Monaco, 'Courier New', monospace" }}
+                            >
+                              {order.orderCode}
+                            </span>
+                          ) : (
+                            "-"
+                          )}
+                        </TableCell>
+                        <TableCell className="py-3 text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button size="sm" variant="outline" onClick={() => void openOrderDetail(order.id)}>
+                              Detail
+                            </Button>
+                            {!isAdmin && order.status === "UPLOADED" ? (
+                              <Button size="sm" onClick={() => void payOrder(order.id)}>
+                                Pay
+                              </Button>
+                            ) : null}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          </>
         )}
       </div>
       )}
