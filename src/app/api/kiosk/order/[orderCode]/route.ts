@@ -22,7 +22,7 @@ export async function GET(
         return fail("Order not found", 404);
     }
 
-    if (order.status !== "PAID") {
+    if (order.status !== "PAID" && order.status !== "FAILED") {
         return fail("Order is not ready for printing", 400);
     }
 

@@ -388,7 +388,7 @@ export class PrintOrderService {
         }
 
         if (action === "start") {
-            if (order.status !== "PAID") {
+            if (order.status !== "PAID" && order.status !== "FAILED") {
                 throw new Error("Order is not ready to print");
             }
 
